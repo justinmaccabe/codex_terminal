@@ -53,8 +53,13 @@ class HousePortfolioModel:
     stats: Dict[str, float]
     stress_table: pd.DataFrame
     vol_target_leverage: float
+    financing_rate: float
     target_vol_series: pd.Series
     target_vol_stats: Dict[str, float]
+    net_target_vol_series: pd.Series
+    net_target_vol_stats: Dict[str, float]
+    research_table: pd.DataFrame
+    subperiod_table: pd.DataFrame
     diagnostics: List[str]
 
 
@@ -64,6 +69,14 @@ HOUSE_BENCHMARK_MODES = [
     "Risk Parity",
     "Blend",
 ]
+
+
+SUBPERIOD_WINDOWS: Dict[str, tuple[str, str | None]] = {
+    "Post-GFC Expansion": ("2010-01-01", "2019-12-31"),
+    "Pandemic / Reopening": ("2020-01-01", "2021-12-31"),
+    "Inflation Shock": ("2022-01-01", "2023-12-31"),
+    "Recent Tape": ("2024-01-01", None),
+}
 
 
 def _score_tilt_rows(screener: pd.DataFrame) -> pd.DataFrame:
@@ -160,6 +173,86 @@ def _optimize_around_anchor(
     return _normalize_holdings(optimized)
 
 
+def _apply_financing_drag(series: pd.Series, leverage: float, financing_rate: float) -> pd.Series:
+    if series.empty or np.isnan(leverage):
+        return pd.Series(dtype=float)
+    borrowed = max(leverage - 1.0, 0.0)
+    if borrowed <= 0 or financing_rate <= 0:
+        return series * leverage
+    daily_drag = borrowed * financing_rate / 252.0
+    return series * leverage - daily_drag
+
+
+def _build_research_table(holdings: pd.DataFrame) -> pd.DataFrame:
+    known = universe_by_ticker()
+    rows = []
+    for row in holdings.itertuples(index=False):
+        asset = known[row.ticker]
+        if asset.diversifier and asset.asset_class in {"Rates", "Real Assets", "Alternatives", "Cash"}:
+            role = "Diversifier"
+        elif asset.style in {"Value", "Size", "Size + Value"}:
+            role = "Structural return sleeve"
+        elif asset.style in {"Momentum", "Trend"}:
+            role = "Tactical / trend sleeve"
+        else:
+            role = "Core beta sleeve"
+
+        rationale = (
+            "Improves diversification and crisis balance."
+            if role == "Diversifier"
+            else "Raises long-run expected return through structural tilts."
+            if role == "Structural return sleeve"
+            else "Responds faster to regime and trend changes."
+            if role == "Tactical / trend sleeve"
+            else "Keeps the benchmark anchored to broad market participation."
+        )
+        rows.append(
+            {
+                "Ticker": row.ticker,
+                "Proxy": asset.proxy_description,
+                "Role": role,
+                "Why It Is Here": rationale,
+                "Strategic Weight": row.strategic_weight,
+                "Current Weight": row.weight,
+                "Tilt": row.tilt_vs_strategic,
+                "Stance": row.stance,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _build_subperiod_table(
+    house_series: pd.Series,
+    spy_series: pd.Series,
+) -> pd.DataFrame:
+    rows: list[dict[str, float | str]] = []
+    if house_series.empty or spy_series.empty:
+        return pd.DataFrame()
+    joined = pd.concat([house_series.rename("house"), spy_series.rename("spy")], axis=1).dropna()
+    if joined.empty:
+        return pd.DataFrame()
+    for label, (start, end) in SUBPERIOD_WINDOWS.items():
+        window = joined.loc[start:end] if end else joined.loc[start:]
+        if window.empty:
+            continue
+        house_stats = summary_stats(window["house"])
+        spy_stats = summary_stats(window["spy"])
+        rows.append(
+            {
+                "Window": label,
+                "House CAGR": house_stats.get("CAGR"),
+                "SPY CAGR": spy_stats.get("CAGR"),
+                "House Sharpe": house_stats.get("Sharpe"),
+                "SPY Sharpe": spy_stats.get("Sharpe"),
+                "Sharpe Spread": (house_stats.get("Sharpe") or np.nan) - (spy_stats.get("Sharpe") or np.nan),
+                "CAGR Spread": (house_stats.get("CAGR") or np.nan) - (spy_stats.get("CAGR") or np.nan),
+                "House Max Drawdown": house_stats.get("Max Drawdown"),
+                "SPY Max Drawdown": spy_stats.get("Max Drawdown"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _build_mode_holdings(
     asset_returns: pd.DataFrame,
     screener: pd.DataFrame,
@@ -223,6 +316,7 @@ def build_market_beating_portfolio(
     screener: pd.DataFrame,
     spy_returns: pd.Series,
     mode: str = "Strategic + Tactical",
+    financing_rate: float = 0.04,
 ) -> HousePortfolioModel:
     holdings = _build_mode_holdings(asset_returns, screener, mode)
 
@@ -233,8 +327,12 @@ def build_market_beating_portfolio(
     leverage = float(np.clip(leverage, 0.75, 1.75)) if not np.isnan(leverage) else np.nan
     target_vol_series = series * leverage if not series.empty and not np.isnan(leverage) else pd.Series(dtype=float)
     target_vol_stats = summary_stats(target_vol_series) if not target_vol_series.empty else {}
+    net_target_vol_series = _apply_financing_drag(series, leverage, financing_rate)
+    net_target_vol_stats = summary_stats(net_target_vol_series) if not net_target_vol_series.empty else {}
     stress_table = compute_stress_table(series, spy_returns) if not series.empty else pd.DataFrame()
-    diagnostics = _diagnostics(holdings, target_vol_stats or stats, spy_stats)
+    diagnostics = _diagnostics(holdings, net_target_vol_stats or target_vol_stats or stats, spy_stats)
+    research_table = _build_research_table(holdings)
+    subperiod_table = _build_subperiod_table(net_target_vol_series if not net_target_vol_series.empty else target_vol_series, spy_returns)
 
     return HousePortfolioModel(
         mode=mode,
@@ -243,7 +341,12 @@ def build_market_beating_portfolio(
         stats=stats,
         stress_table=stress_table,
         vol_target_leverage=leverage,
+        financing_rate=financing_rate,
         target_vol_series=target_vol_series,
         target_vol_stats=target_vol_stats,
+        net_target_vol_series=net_target_vol_series,
+        net_target_vol_stats=net_target_vol_stats,
+        research_table=research_table,
+        subperiod_table=subperiod_table,
         diagnostics=diagnostics,
     )

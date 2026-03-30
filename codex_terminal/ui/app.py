@@ -223,6 +223,8 @@ def _house_holdings_frame(context: Dict[str, object]) -> pd.DataFrame:
 
 def _house_benchmark_series_and_stats(context: Dict[str, object]) -> tuple[pd.Series, dict]:
     model = context["house_model"]
+    if not model.net_target_vol_series.empty and model.net_target_vol_stats:
+        return model.net_target_vol_series, model.net_target_vol_stats
     if not model.target_vol_series.empty and model.target_vol_stats:
         return model.target_vol_series, model.target_vol_stats
     return model.series, model.stats
@@ -277,6 +279,7 @@ def _render_factor_block(name: str, attribution) -> None:
 
 def _load_market_context() -> Dict[str, object]:
     mode = st.session_state.get("house_benchmark_mode", "Strategic + Tactical")
+    financing_rate = float(st.session_state.get("house_financing_rate", 0.04))
     prices = fetch_price_history(tickers())
     returns = compute_returns(prices)
     status = infer_status(prices, tickers())
@@ -286,7 +289,7 @@ def _load_market_context() -> Dict[str, object]:
     macro_snapshot = macro_snapshots(fred_bundle)
     screener = compute_screener_scores(prices, regime=regime.regime)
     spy_returns = returns.get("SPY", pd.Series(dtype=float))
-    house_model = build_market_beating_portfolio(returns, screener, spy_returns, mode=mode)
+    house_model = build_market_beating_portfolio(returns, screener, spy_returns, mode=mode, financing_rate=financing_rate)
     return {
         "prices": prices,
         "returns": returns,
@@ -310,6 +313,16 @@ def _render_sidebar() -> str:
         "Benchmark Mode",
         HOUSE_BENCHMARK_MODES,
         index=HOUSE_BENCHMARK_MODES.index(current_mode) if current_mode in HOUSE_BENCHMARK_MODES else 0,
+    )
+    current_financing = float(st.session_state.get("house_financing_rate", 0.04))
+    st.session_state["house_financing_rate"] = st.sidebar.number_input(
+        "Leverage Financing Rate",
+        min_value=0.0,
+        max_value=0.20,
+        value=current_financing,
+        step=0.005,
+        format="%.3f",
+        help="Annual financing drag applied to borrowed capital above 1.0x gross exposure.",
     )
     default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
     pending_page = st.session_state.pop("pending_nav_page", None)
@@ -364,9 +377,9 @@ def _render_header(context: Dict[str, object]) -> None:
     _render_desk_grid(
         [
             ("Macro Regime", regime.regime, f"confidence {regime.confidence.lower()}"),
-            ("House Sharpe", _format_float(house_stats.get("Sharpe")), "vol-targeted"),
+            ("House Sharpe", _format_float(house_stats.get("Sharpe")), "net vol-targeted"),
             ("Vol-Target Leverage", _format_float(house_model.vol_target_leverage), "match SPY risk"),
-            ("Data Coverage", "Live" if status.ok else "Degraded", status.message),
+            ("Financing Rate", _format_pct(house_model.financing_rate), "annual drag"),
         ]
     )
     st.markdown(
@@ -375,6 +388,58 @@ def _render_header(context: Dict[str, object]) -> None:
         "</div>",
         unsafe_allow_html=True,
     )
+    st.caption(
+        f"Live market data: {'ok' if status.ok else 'degraded'}. "
+        f"Macro data: {'ok' if fred_status.ok else 'degraded'}. "
+        f"House benchmark metrics are shown net of a {house_model.financing_rate:.2%} financing assumption when leverage exceeds 1.0x."
+    )
+
+
+def _render_house_research_block(context: Dict[str, object], title: str = "House Benchmark Research") -> None:
+    house_model = context["house_model"]
+    _render_section_title(title)
+    cols = st.columns([1.15, 0.85])
+    with cols[0]:
+        if house_model.research_table.empty:
+            st.info("Research table unavailable.")
+        else:
+            st.dataframe(
+                house_model.research_table.style.format(
+                    {
+                        "Strategic Weight": _format_pct,
+                        "Current Weight": _format_pct,
+                        "Tilt": _format_pct,
+                    }
+                ),
+                use_container_width=True,
+            )
+    with cols[1]:
+        st.markdown("**Benchmark Notes**")
+        for note in house_model.diagnostics:
+            st.write(f"- {note}")
+        st.caption(
+            f"Gross target-vol returns are still available internally, but displayed house metrics default to the net series after a {house_model.financing_rate:.2%} financing drag."
+        )
+
+    _render_section_title("Subperiod Scorecard")
+    if house_model.subperiod_table.empty:
+        st.info("Not enough history to evaluate subperiods.")
+    else:
+        st.dataframe(
+            house_model.subperiod_table.style.format(
+                {
+                    "House CAGR": _format_pct,
+                    "SPY CAGR": _format_pct,
+                    "House Sharpe": _format_float,
+                    "SPY Sharpe": _format_float,
+                    "Sharpe Spread": _format_float,
+                    "CAGR Spread": _format_pct,
+                    "House Max Drawdown": _format_pct,
+                    "SPY Max Drawdown": _format_pct,
+                }
+            ),
+            use_container_width=True,
+        )
 
 
 def _render_terminal(context: Dict[str, object]) -> None:
@@ -415,9 +480,9 @@ def _render_terminal(context: Dict[str, object]) -> None:
         _render_section_title("Market Beating Portfolio Snapshot")
         _render_desk_grid(
             [
-                ("CAGR", _format_pct(house_stats.get("CAGR")), "vol-targeted"),
+                ("CAGR", _format_pct(house_stats.get("CAGR")), "net vol-targeted"),
                 ("Volatility", _format_pct(house_stats.get("Volatility")), "targeted benchmark"),
-                ("Sharpe", _format_float(house_stats.get("Sharpe")), "risk-adjusted"),
+                ("Sharpe", _format_float(house_stats.get("Sharpe")), "risk-adjusted net"),
                 ("Max Drawdown", _format_pct(house_stats.get("Max Drawdown")), "historical"),
             ]
         )
@@ -470,6 +535,7 @@ def _render_terminal(context: Dict[str, object]) -> None:
                 diff.style.format({"Left": _format_pct, "Right": _format_pct, "Difference": _format_pct}),
                 use_container_width=True,
             )
+    _render_house_research_block(context)
 
     regime = context["regime"]
     _render_section_title("What Changed / What Matters / What To Watch")
@@ -1076,8 +1142,8 @@ def _render_portfolio_lab(context: Dict[str, object]) -> None:
         [
             ("Selected Sleeves", str(len(selected)), "portfolio sandbox"),
             ("House Leverage", _format_float(house_model.vol_target_leverage), "SPY vol target"),
-            ("House Sharpe", _format_float(house_stats.get("Sharpe")), "vol-targeted benchmark"),
-            ("House CAGR", _format_pct(house_stats.get("CAGR")), "vol-targeted benchmark"),
+            ("House Sharpe", _format_float(house_stats.get("Sharpe")), "net vol-targeted benchmark"),
+            ("House CAGR", _format_pct(house_stats.get("CAGR")), "net vol-targeted benchmark"),
         ]
     )
 
@@ -1161,6 +1227,7 @@ def _render_portfolio_lab(context: Dict[str, object]) -> None:
         ),
         use_container_width=True,
     )
+    _render_house_research_block(context, "Why The House Benchmark Looks Like This")
 
 
 def _render_compare(context: Dict[str, object]) -> None:
@@ -1341,7 +1408,7 @@ def _render_macro(context: Dict[str, object]) -> None:
             ("Confidence", regime.confidence, "classification"),
             ("Macro Feed", "Live" if fred_status.ok else "Degraded", fred_status.source),
             ("House Leverage", _format_float(context["house_model"].vol_target_leverage), "SPY-targeted"),
-            ("House CAGR", _format_pct(house_stats.get("CAGR")), "vol-targeted benchmark"),
+            ("House CAGR", _format_pct(house_stats.get("CAGR")), "net vol-targeted benchmark"),
         ]
     )
     if fred_status.ok:
@@ -1396,6 +1463,7 @@ def _render_macro(context: Dict[str, object]) -> None:
             _render_section_title("What This Means For The House Benchmark")
             for note in context["house_model"].diagnostics:
                 st.write(f"- {note}")
+        st.caption(f"House stats on this page are net of a {context['house_model'].financing_rate:.2%} financing assumption.")
 
 
 def _render_learn(context: Dict[str, object]) -> None:
