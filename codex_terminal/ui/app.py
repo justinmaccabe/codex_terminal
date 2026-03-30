@@ -32,7 +32,7 @@ from codex_terminal.config.universe import (
     tickers,
     universe_by_ticker,
 )
-from codex_terminal.data.fred import DEFAULT_FRED_SERIES, fetch_fred_bundle
+from codex_terminal.data.fred import DEFAULT_FRED_SERIES, fetch_fred_bundle, infer_fred_status
 from codex_terminal.data.market_data import compute_returns, fetch_price_history, infer_status, latest_available
 from codex_terminal.data.vanguard import fetch_vanguard_benchmark_history, infer_vanguard_target_fund
 from codex_terminal.portfolio.benchmarks import degraded_vanguard_state
@@ -225,6 +225,7 @@ def _load_market_context() -> Dict[str, object]:
     returns = compute_returns(prices)
     status = infer_status(prices, tickers())
     fred_bundle = fetch_fred_bundle(DEFAULT_FRED_SERIES)
+    fred_status = infer_fred_status(fred_bundle, DEFAULT_FRED_SERIES)
     regime = classify_regime(fred_bundle)
     macro_snapshot = macro_snapshots(fred_bundle)
     screener = compute_screener_scores(prices, regime=regime.regime)
@@ -235,6 +236,7 @@ def _load_market_context() -> Dict[str, object]:
         "returns": returns,
         "status": status,
         "fred_bundle": fred_bundle,
+        "fred_status": fred_status,
         "regime": regime,
         "macro_snapshot": macro_snapshot,
         "screener": screener,
@@ -263,15 +265,21 @@ def _render_sidebar() -> str:
 def _render_header(context: Dict[str, object]) -> None:
     regime = context["regime"]
     status = context["status"]
+    fred_status = context["fred_status"]
     st.title("codex_terminal")
-    st.caption("Streamlit v1 foundation build: Phases 1 and 2 with live data plumbing.")
-    cols = st.columns([2, 2, 3])
+    st.caption("Live cross-asset research terminal with market, macro, benchmark, and portfolio diagnostics.")
+    cols = st.columns([2, 2, 2, 3])
     cols[0].metric("Macro Regime", regime.regime)
     cols[1].metric("Regime Confidence", regime.confidence)
-    if status.ok:
-        cols[2].success(status.message)
+    cols[2].metric("Macro Data", "Live" if fred_status.ok else "Degraded")
+    if status.ok and fred_status.ok:
+        cols[3].success(f"{status.message} {fred_status.message}")
+    elif status.ok and not fred_status.ok:
+        cols[3].warning(f"{status.message} {fred_status.message}")
+    elif not status.ok and fred_status.ok:
+        cols[3].warning(f"{status.message} {fred_status.message}")
     else:
-        cols[2].warning(status.message)
+        cols[3].error(f"{status.message} {fred_status.message}")
     house_model = context["house_model"]
     _, house_stats = _house_benchmark_series_and_stats(context)
     _render_desk_grid(
@@ -928,6 +936,7 @@ def _render_compare(context: Dict[str, object]) -> None:
 def _render_macro(context: Dict[str, object]) -> None:
     st.subheader("Macro")
     regime = context["regime"]
+    fred_status = context["fred_status"]
     house_series, house_stats = _house_benchmark_series_and_stats(context)
     implications = regime_implications(regime.regime)
     snapshots = context["macro_snapshot"]
@@ -935,10 +944,15 @@ def _render_macro(context: Dict[str, object]) -> None:
         [
             ("Regime", regime.regime, "current"),
             ("Confidence", regime.confidence, "classification"),
+            ("Macro Feed", "Live" if fred_status.ok else "Degraded", fred_status.source),
             ("House Leverage", _format_float(context["house_model"].vol_target_leverage), "SPY-targeted"),
             ("House CAGR", _format_pct(house_stats.get("CAGR")), "vol-targeted benchmark"),
         ]
     )
+    if fred_status.ok:
+        st.caption(fred_status.message)
+    else:
+        st.warning(fred_status.message)
     st.write(regime.summary)
 
     snapshot_cols = st.columns(3)
