@@ -6,5 +6,6 @@ dependencies:
   - streamlit=1.46.1
   - pandas
   - numpy
+  - plotly
   - requests
-
+  - yfinance
