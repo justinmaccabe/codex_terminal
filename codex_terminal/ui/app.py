@@ -135,6 +135,54 @@ def _inject_terminal_theme() -> None:
             font-weight: 600;
             letter-spacing: 0.04em;
         }
+        .hero-card {
+            background:
+                radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
+                linear-gradient(135deg, rgba(12, 21, 32, 0.98), rgba(8, 16, 24, 0.98));
+            border: 1px solid rgba(106, 149, 173, 0.22);
+            border-radius: 16px;
+            padding: 1.1rem 1.2rem;
+            margin: 0.35rem 0 1rem 0;
+            box-shadow: 0 14px 30px rgba(2, 8, 14, 0.28);
+        }
+        .hero-eyebrow {
+            color: #84b6cf;
+            font-size: 0.72rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            margin-bottom: 0.4rem;
+        }
+        .hero-title {
+            color: #f2f7fb;
+            font-size: 1.75rem;
+            line-height: 1.15;
+            font-weight: 700;
+            margin-bottom: 0.55rem;
+        }
+        .hero-copy {
+            color: #aec2cf;
+            max-width: 56rem;
+            font-size: 0.98rem;
+            line-height: 1.6;
+        }
+        .info-panel {
+            background: linear-gradient(180deg, rgba(10, 18, 28, 0.92), rgba(8, 13, 20, 0.92));
+            border: 1px solid rgba(82, 119, 139, 0.18);
+            border-radius: 12px;
+            padding: 0.9rem 1rem;
+            margin: 0.2rem 0 0.9rem 0;
+        }
+        .info-panel-title {
+            color: #dceaf3;
+            font-size: 0.92rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .info-panel-copy {
+            color: #9fb3c0;
+            font-size: 0.88rem;
+            line-height: 1.55;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -257,12 +305,31 @@ def _render_sidebar() -> str:
     )
     default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
     pending_page = st.session_state.pop("pending_nav_page", None)
-    if pending_page in PAGES:
-        st.session_state["nav_page"] = pending_page
-    current_page = st.session_state.get("nav_page", default_page)
+    current_page = pending_page if pending_page in PAGES else st.session_state.get("nav_page", default_page)
     if current_page not in PAGES:
         current_page = default_page
-    return st.sidebar.radio("Module", PAGES, index=PAGES.index(current_page), key="nav_page")
+    if "module_radio" not in st.session_state:
+        st.session_state["module_radio"] = current_page
+    elif st.session_state["module_radio"] not in PAGES:
+        st.session_state["module_radio"] = default_page
+    elif pending_page in PAGES:
+        st.session_state["module_radio"] = pending_page
+
+    page = st.sidebar.radio("Module", PAGES, key="module_radio")
+    st.session_state["nav_page"] = page
+
+    with st.sidebar.expander("First-Time Guide", expanded=False):
+        st.caption("Best order for a new user")
+        st.write("1. Morning Brief")
+        st.write("2. Terminal")
+        st.write("3. Compare")
+        st.write("4. Portfolio Lab")
+        if st.button("Show Welcome Again", use_container_width=True):
+            st.session_state["onboarding_seen"] = False
+            st.session_state["pending_nav_page"] = "Welcome"
+            st.rerun()
+
+    return page
 
 
 def _render_header(context: Dict[str, object]) -> None:
@@ -505,12 +572,18 @@ def _render_welcome(context: Dict[str, object]) -> None:
     st.subheader("Welcome")
     st.markdown(
         """
-        codex_terminal is a cross-asset portfolio and market dashboard built to help you answer three practical questions:
-
-        1. What is happening in markets right now?
-        2. What does that imply for a diversified long-term portfolio?
-        3. How does your own portfolio compare to a disciplined benchmark?
-        """
+        <div class="hero-card">
+            <div class="hero-eyebrow">Cross-Asset Decision Terminal</div>
+            <div class="hero-title">One place to understand the market, evaluate a portfolio, and build conviction.</div>
+            <div class="hero-copy">
+                codex_terminal is built to answer three practical questions:
+                what is happening in markets right now, what that means for a diversified long-term portfolio,
+                and how your portfolio compares to disciplined benchmarks like SPY, a Vanguard target-date fund,
+                and the Market Beating Portfolio.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
     _render_desk_grid(
@@ -524,6 +597,19 @@ def _render_welcome(context: Dict[str, object]) -> None:
 
     intro_cols = st.columns([1.1, 0.9])
     with intro_cols[0]:
+        st.markdown(
+            """
+            <div class="info-panel">
+                <div class="info-panel-title">What You Should Expect In The First Five Minutes</div>
+                <div class="info-panel-copy">
+                    Read the brief, check whether leadership is broad or narrow, then use Compare if you already
+                    have a portfolio. If you do not, the Portfolio Lab and house benchmark will show you how this
+                    app thinks about building one.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
         _render_section_title("What This App Is For")
         st.write(
             "- understanding current market leadership across asset classes"
@@ -551,6 +637,19 @@ def _render_welcome(context: Dict[str, object]) -> None:
         )
         st.write(
             "It is especially useful if you are comfortable with markets but want help thinking in terms of diversification, regimes, factors, and benchmark-relative risk."
+        )
+
+        st.markdown(
+            """
+            <div class="info-panel">
+                <div class="info-panel-title">A Good First Question To Ask</div>
+                <div class="info-panel-copy">
+                    Is the current market rewarding broad risk-taking, narrow leadership, or diversification?
+                    If you can answer that, the rest of the app becomes much easier to interpret.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
         _render_section_title("What To Expect")
