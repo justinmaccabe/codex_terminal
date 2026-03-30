@@ -6,7 +6,7 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 
-from codex_terminal.analytics.expected_returns import build_expected_return_table
+from codex_terminal.analytics.expected_returns import build_expected_return_table, build_heuristic_expected_return_table
 from codex_terminal.analytics.metrics import summary_stats
 from codex_terminal.analytics.portfolio import (
     compute_stress_table,
@@ -50,6 +50,7 @@ TACTICAL_MAP = {
 class HousePortfolioModel:
     mode: str
     selected_mode: str
+    expected_return_engine: str
     holdings: pd.DataFrame
     series: pd.Series
     stats: Dict[str, float]
@@ -64,6 +65,7 @@ class HousePortfolioModel:
     expected_return_table: pd.DataFrame
     crisis_alpha_table: pd.DataFrame
     change_log_table: pd.DataFrame
+    sleeve_review_table: pd.DataFrame
     subperiod_table: pd.DataFrame
     diagnostics: List[str]
 
@@ -87,18 +89,24 @@ SUBPERIOD_WINDOWS: Dict[str, tuple[str, str | None]] = {
 
 def summarize_house_modes(
     asset_returns: pd.DataFrame,
+    prices: pd.DataFrame,
+    fred_bundle: Dict[str, pd.Series],
     screener: pd.DataFrame,
     spy_returns: pd.Series,
     financing_rate: float,
+    expected_return_engine: str,
 ) -> pd.DataFrame:
     rows: list[dict[str, float | str]] = []
     for mode in CORE_HOUSE_MODES:
         model = build_market_beating_portfolio(
             asset_returns,
+            prices,
+            fred_bundle,
             screener,
             spy_returns,
             mode=mode,
             financing_rate=financing_rate,
+            expected_return_engine=expected_return_engine,
         )
         gross = model.target_vol_stats or {}
         net = model.net_target_vol_stats or model.target_vol_stats or {}
@@ -414,17 +422,57 @@ def _build_change_log_table(
     return frame.reindex(frame["Tilt"].abs().sort_values(ascending=False).index).reset_index(drop=True)
 
 
+def _build_sleeve_review_table(
+    holdings: pd.DataFrame,
+    expected_return_table: pd.DataFrame,
+    crisis_alpha_table: pd.DataFrame,
+) -> pd.DataFrame:
+    if holdings.empty:
+        return pd.DataFrame()
+    expected_map = expected_return_table.set_index("Ticker")["Expected Return Score"].to_dict() if not expected_return_table.empty else {}
+    confidence_map = expected_return_table.set_index("Ticker")["Confidence"].to_dict() if not expected_return_table.empty else {}
+    crisis_map = crisis_alpha_table.set_index("Ticker")["Crisis Alpha Score"].to_dict() if not crisis_alpha_table.empty else {}
+    rows: list[dict[str, float | str]] = []
+    for row in holdings.itertuples(index=False):
+        expected_score = float(expected_map.get(row.ticker, 0.0))
+        confidence = float(confidence_map.get(row.ticker, 0.5))
+        crisis_score = float(crisis_map.get(row.ticker, 0.0))
+        recommendation = "Keep"
+        if row.weight < row.strategic_weight and expected_score > 0.40 and crisis_score > 0.20:
+            recommendation = "Consider Adding"
+        elif row.weight > row.strategic_weight and expected_score < -0.35:
+            recommendation = "Trim"
+        elif expected_score < -0.20 and crisis_score < -0.20:
+            recommendation = "Question"
+        conviction = np.clip(0.5 + 0.2 * expected_score + 0.15 * crisis_score + 0.2 * (confidence - 0.5), 0.0, 1.0)
+        rows.append(
+            {
+                "Ticker": row.ticker,
+                "Recommendation": recommendation,
+                "Conviction": conviction,
+                "Current Weight": row.weight,
+                "Expected Return Score": expected_score,
+                "Crisis Alpha Score": crisis_score,
+                "Confidence": confidence,
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["Recommendation", "Conviction"], ascending=[True, False]).reset_index(drop=True)
+
+
 def _resolve_selected_mode(
     asset_returns: pd.DataFrame,
+    prices: pd.DataFrame,
+    fred_bundle: Dict[str, pd.Series],
     screener: pd.DataFrame,
     spy_returns: pd.Series,
     expected_return_table: pd.DataFrame,
     mode: str,
     financing_rate: float,
+    expected_return_engine: str,
 ) -> str:
     if mode != "Committee Winner":
         return mode
-    committee = summarize_house_modes(asset_returns, screener, spy_returns, financing_rate)
+    committee = summarize_house_modes(asset_returns, prices, fred_bundle, screener, spy_returns, financing_rate, expected_return_engine)
     if committee.empty:
         return "Strategic + Tactical"
     return str(committee.iloc[0]["Mode"])
@@ -539,9 +587,13 @@ def build_market_beating_portfolio(
     spy_returns: pd.Series,
     mode: str = "Strategic + Tactical",
     financing_rate: float = 0.04,
+    expected_return_engine: str = "External Inputs",
 ) -> HousePortfolioModel:
-    expected_return_engine = build_expected_return_table(prices, fred_bundle)
-    expected_return_table = expected_return_engine.rename(
+    if expected_return_engine == "Heuristic":
+        raw_expected_return_table = build_heuristic_expected_return_table(prices)
+    else:
+        raw_expected_return_table = build_expected_return_table(prices, fred_bundle)
+    expected_return_table = raw_expected_return_table.rename(
         columns={
             "ticker": "Ticker",
             "proxy": "Proxy",
@@ -555,7 +607,17 @@ def build_market_beating_portfolio(
             "expected_return_score": "Expected Return Score",
         }
     )
-    selected_mode = _resolve_selected_mode(asset_returns, screener, spy_returns, expected_return_table, mode, financing_rate)
+    selected_mode = _resolve_selected_mode(
+        asset_returns,
+        prices,
+        fred_bundle,
+        screener,
+        spy_returns,
+        expected_return_table,
+        mode,
+        financing_rate,
+        expected_return_engine,
+    )
     holdings = _build_mode_holdings(asset_returns, screener, spy_returns, expected_return_table, selected_mode)
 
     series = portfolio_returns(holdings[["ticker", "weight"]], asset_returns)
@@ -572,11 +634,13 @@ def build_market_beating_portfolio(
     research_table = _build_research_table(holdings)
     crisis_alpha_table = _crisis_alpha_table(asset_returns, spy_returns)
     change_log_table = _build_change_log_table(holdings, expected_return_table, crisis_alpha_table)
+    sleeve_review_table = _build_sleeve_review_table(holdings, expected_return_table, crisis_alpha_table)
     subperiod_table = _build_subperiod_table(net_target_vol_series if not net_target_vol_series.empty else target_vol_series, spy_returns)
 
     return HousePortfolioModel(
         mode=mode,
         selected_mode=selected_mode,
+        expected_return_engine=expected_return_engine,
         holdings=holdings,
         series=series,
         stats=stats,
@@ -591,6 +655,7 @@ def build_market_beating_portfolio(
         expected_return_table=expected_return_table,
         crisis_alpha_table=crisis_alpha_table,
         change_log_table=change_log_table,
+        sleeve_review_table=sleeve_review_table,
         subperiod_table=subperiod_table,
         diagnostics=diagnostics,
     )

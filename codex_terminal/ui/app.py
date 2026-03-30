@@ -280,6 +280,7 @@ def _render_factor_block(name: str, attribution) -> None:
 def _load_market_context() -> Dict[str, object]:
     mode = st.session_state.get("house_benchmark_mode", "Strategic + Tactical")
     financing_rate = float(st.session_state.get("house_financing_rate", 0.04))
+    expected_return_engine = st.session_state.get("expected_return_engine", "External Inputs")
     prices = fetch_price_history(tickers())
     returns = compute_returns(prices)
     status = infer_status(prices, tickers())
@@ -297,6 +298,7 @@ def _load_market_context() -> Dict[str, object]:
         spy_returns,
         mode=mode,
         financing_rate=financing_rate,
+        expected_return_engine=expected_return_engine,
     )
     return {
         "prices": prices,
@@ -333,6 +335,13 @@ def _render_sidebar() -> str:
         help="Annual financing drag applied to borrowed capital above 1.0x gross exposure.",
     )
     st.session_state["house_financing_rate"] = float(st.session_state["house_financing_rate"]) / 100.0
+    current_engine = st.session_state.get("expected_return_engine", "External Inputs")
+    st.session_state["expected_return_engine"] = st.sidebar.selectbox(
+        "Expected Return Engine",
+        ["External Inputs", "Heuristic"],
+        index=0 if current_engine == "External Inputs" else 1,
+        help="External Inputs uses FRED-backed formulas. Heuristic uses the prior internal scoring framework.",
+    )
     default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
     pending_page = st.session_state.pop("pending_nav_page", None)
     current_page = pending_page if pending_page in PAGES else st.session_state.get("nav_page", default_page)
@@ -400,7 +409,8 @@ def _render_header(context: Dict[str, object]) -> None:
     st.caption(
         f"Live market data: {'ok' if status.ok else 'degraded'}. "
         f"Macro data: {'ok' if fred_status.ok else 'degraded'}. "
-        f"House benchmark metrics are shown net of a {house_model.financing_rate:.2%} financing assumption when leverage exceeds 1.0x."
+        f"House benchmark metrics are shown net of a {house_model.financing_rate:.2%} financing assumption when leverage exceeds 1.0x. "
+        f"Expected return engine: {house_model.expected_return_engine}."
     )
 
 
@@ -465,7 +475,7 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             use_container_width=True,
         )
 
-    research_tabs = st.tabs(["Change Log", "Expected Return Lenses", "Crisis Alpha", "Benchmark Committee"])
+    research_tabs = st.tabs(["Change Log", "Expected Return Lenses", "Sleeve Review", "Crisis Alpha", "Benchmark Committee"])
     with research_tabs[0]:
         if house_model.change_log_table.empty:
             st.info("Change log unavailable.")
@@ -500,9 +510,30 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
                 ),
                 use_container_width=True,
             )
-            st.caption("This expected-return engine is formula-based rather than purely heuristic. It combines a structural baseline with market, factor, and crisis adjustments derived from sleeve definitions plus live FRED context.")
+            st.caption(
+                "This table reflects the active expected-return engine. "
+                "Use the sidebar to compare the FRED-backed external-input engine against the older heuristic engine."
+            )
 
     with research_tabs[2]:
+        if house_model.sleeve_review_table.empty:
+            st.info("Sleeve review unavailable.")
+        else:
+            st.dataframe(
+                house_model.sleeve_review_table.style.format(
+                    {
+                        "Conviction": _format_pct,
+                        "Current Weight": _format_pct,
+                        "Expected Return Score": _format_float,
+                        "Crisis Alpha Score": _format_float,
+                        "Confidence": _format_float,
+                    }
+                ),
+                use_container_width=True,
+            )
+            st.caption("This is the committee-style sleeve review: keep, add, trim, or question each sleeve based on current expected return, crisis value, and confidence.")
+
+    with research_tabs[3]:
         if house_model.crisis_alpha_table.empty:
             st.info("Crisis alpha table unavailable.")
         else:
@@ -517,12 +548,15 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             )
             st.caption("Crisis alpha highlights sleeves that historically held up or improved relative to SPY when SPY was under stress. These are the sleeves most likely to justify leverage in a diversified benchmark.")
 
-    with research_tabs[3]:
+    with research_tabs[4]:
         committee = summarize_house_modes(
             context["returns"],
+            context["prices"],
+            context["fred_bundle"],
             context["screener"],
             context["returns"].get("SPY", pd.Series(dtype=float)),
             house_model.financing_rate,
+            house_model.expected_return_engine,
         )
         st.dataframe(
             committee.style.format(

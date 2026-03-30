@@ -39,6 +39,10 @@ DEFAULT_FRED_SERIES = [
     FredSeries("UNRATE", "Unemployment Rate"),
     FredSeries("CPIAUCSL", "CPI"),
     FredSeries("FEDFUNDS", "Fed Funds"),
+    FredSeries("DGS2", "2Y Treasury"),
+    FredSeries("DGS10", "10Y Treasury"),
+    FredSeries("DFII10", "10Y Real Yield"),
+    FredSeries("T10YIE", "10Y Breakeven Inflation"),
     FredSeries("T10Y2Y", "10Y-2Y Curve"),
     FredSeries("BAMLH0A0HYM2", "High Yield OAS"),
 ]
