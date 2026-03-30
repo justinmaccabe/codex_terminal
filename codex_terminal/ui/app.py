@@ -39,7 +39,7 @@ from codex_terminal.portfolio.benchmarks import degraded_vanguard_state
 from codex_terminal.portfolio.compare import compare_stats, normalize_portfolio_frame, portfolio_returns
 
 
-PAGES = ["Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Macro", "Learn"]
+PAGES = ["Welcome", "Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Macro", "Learn"]
 
 
 def _format_pct(value: float) -> str:
@@ -253,7 +253,11 @@ def _render_sidebar() -> str:
         HOUSE_BENCHMARK_MODES,
         index=HOUSE_BENCHMARK_MODES.index(current_mode) if current_mode in HOUSE_BENCHMARK_MODES else 0,
     )
-    return st.sidebar.radio("Module", PAGES, index=0)
+    default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
+    current_page = st.session_state.get("nav_page", default_page)
+    if current_page not in PAGES:
+        current_page = default_page
+    return st.sidebar.radio("Module", PAGES, index=PAGES.index(current_page), key="nav_page")
 
 
 def _render_header(context: Dict[str, object]) -> None:
@@ -484,6 +488,93 @@ def _render_morning_brief(context: Dict[str, object]) -> None:
         notes.append("If cross-asset correlations are rising, diversification is giving you less protection exactly when you want it most.")
         for note in notes:
             st.write(f"- {note}")
+
+
+def _render_welcome(context: Dict[str, object]) -> None:
+    st.subheader("Welcome")
+    st.markdown(
+        """
+        codex_terminal is a cross-asset portfolio and market dashboard built to help you answer three practical questions:
+
+        1. What is happening in markets right now?
+        2. What does that imply for a diversified long-term portfolio?
+        3. How does your own portfolio compare to a disciplined benchmark?
+        """
+    )
+
+    _render_desk_grid(
+        [
+            ("Best First Tab", "Morning Brief", "start here"),
+            ("Daily Use", "Terminal", "market dashboard"),
+            ("Portfolio Work", "Compare", "upload a portfolio"),
+            ("Research Depth", "Portfolio Lab", "test constructions"),
+        ]
+    )
+
+    intro_cols = st.columns([1.1, 0.9])
+    with intro_cols[0]:
+        _render_section_title("What This App Is For")
+        st.write(
+            "- understanding current market leadership across asset classes"
+        )
+        st.write(
+            "- seeing how diversification is working or failing in real time"
+        )
+        st.write(
+            "- comparing a personal portfolio to SPY, a Vanguard target-date benchmark, and the Market Beating Portfolio"
+        )
+        st.write(
+            "- learning how macro regime, factor tilts, and cross-asset correlations affect portfolio construction"
+        )
+
+        _render_section_title("How To Use It")
+        st.write("1. Start on `Morning Brief` to understand what changed in markets.")
+        st.write("2. Use `Terminal` for the broader dashboard view.")
+        st.write("3. Use `Compare` if you want to evaluate a real portfolio.")
+        st.write("4. Use `Portfolio Lab` if you want to test or build allocations.")
+
+    with intro_cols[1]:
+        _render_section_title("Who This Is Built For")
+        st.write(
+            "This app is designed for an investor who wants professional-grade market context without needing full buy-side training."
+        )
+        st.write(
+            "It is especially useful if you are comfortable with markets but want help thinking in terms of diversification, regimes, factors, and benchmark-relative risk."
+        )
+
+        _render_section_title("What To Expect")
+        st.write(
+            "You will see a lot of information. That is intentional. The goal is not to simplify markets into a single signal, but to help you build conviction faster."
+        )
+        st.write(
+            "The app is most useful when read top-down: start with the brief, then move into the diagnostics that matter for your portfolio."
+        )
+
+    _render_section_title("What Each Tab Does")
+    tab_frame = pd.DataFrame(
+        [
+            {"Tab": "Morning Brief", "Purpose": "One-tab market read: what changed, what is leading, what matters now."},
+            {"Tab": "Terminal", "Purpose": "The full command-center view across markets, benchmark positioning, and cross-asset context."},
+            {"Tab": "Screener", "Purpose": "Ranks sleeves by trend, momentum, structural context, and macro fit."},
+            {"Tab": "Portfolio Lab", "Purpose": "Build and test portfolio ideas and compare them to SPY and the house benchmark."},
+            {"Tab": "Compare", "Purpose": "Upload a portfolio and compare it to key benchmarks and exposures."},
+            {"Tab": "Macro", "Purpose": "Understand the current regime and how it tends to affect assets and factors."},
+            {"Tab": "Learn", "Purpose": "Explain the framework, what may be failing, and what to pay attention to next."},
+        ]
+    )
+    st.dataframe(tab_frame, use_container_width=True)
+
+    cta_cols = st.columns([0.55, 0.45])
+    with cta_cols[0]:
+        if st.button("Start With Morning Brief", use_container_width=True):
+            st.session_state["onboarding_seen"] = True
+            st.session_state["nav_page"] = "Morning Brief"
+            st.rerun()
+    with cta_cols[1]:
+        if st.button("Go To Compare", use_container_width=True):
+            st.session_state["onboarding_seen"] = True
+            st.session_state["nav_page"] = "Compare"
+            st.rerun()
 
 
 def _render_screener(context: Dict[str, object]) -> None:
@@ -962,7 +1053,9 @@ def main() -> None:
     page = _render_sidebar()
     _render_header(context)
 
-    if page == "Morning Brief":
+    if page == "Welcome":
+        _render_welcome(context)
+    elif page == "Morning Brief":
         _render_morning_brief(context)
     elif page == "Terminal":
         _render_terminal(context)
