@@ -399,6 +399,10 @@ def _render_header(context: Dict[str, object]) -> None:
 def _render_house_research_block(context: Dict[str, object], title: str = "House Benchmark Research") -> None:
     house_model = context["house_model"]
     _render_section_title(title)
+    if house_model.mode == "Committee Winner":
+        st.info(
+            f"Committee Winner selected `{house_model.selected_mode}` from the available house modes using net Sharpe, gross Sharpe, CAGR, and drawdown evidence."
+        )
     cols = st.columns([1.15, 0.85])
     with cols[0]:
         if house_model.research_table.empty:
@@ -453,8 +457,24 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             use_container_width=True,
         )
 
-    research_tabs = st.tabs(["Expected Return Lenses", "Crisis Alpha", "Benchmark Committee"])
+    research_tabs = st.tabs(["Change Log", "Expected Return Lenses", "Crisis Alpha", "Benchmark Committee"])
     with research_tabs[0]:
+        if house_model.change_log_table.empty:
+            st.info("Change log unavailable.")
+        else:
+            st.dataframe(
+                house_model.change_log_table.style.format(
+                    {
+                        "Strategic Weight": _format_pct,
+                        "Current Weight": _format_pct,
+                        "Tilt": _format_pct,
+                    }
+                ),
+                use_container_width=True,
+            )
+            st.caption("This is the current rebalance log: which sleeves moved away from the strategic anchor, in which direction, and the primary evidence behind the move.")
+
+    with research_tabs[1]:
         if house_model.expected_return_table.empty:
             st.info("Expected return lens table unavailable.")
         else:
@@ -472,7 +492,7 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             )
             st.caption("This is a heuristic expected-return stack, not a full capital-markets model. It combines value, carry, diversification, and trend context to show which sleeves are most likely to improve the benchmark engine.")
 
-    with research_tabs[1]:
+    with research_tabs[2]:
         if house_model.crisis_alpha_table.empty:
             st.info("Crisis alpha table unavailable.")
         else:
@@ -487,7 +507,7 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             )
             st.caption("Crisis alpha highlights sleeves that historically held up or improved relative to SPY when SPY was under stress. These are the sleeves most likely to justify leverage in a diversified benchmark.")
 
-    with research_tabs[2]:
+    with research_tabs[3]:
         committee = summarize_house_modes(
             context["returns"],
             context["screener"],
@@ -502,6 +522,7 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
                     "Net CAGR": _format_pct,
                     "Net Max Drawdown": _format_pct,
                     "Leverage": _format_float,
+                    "Committee Score": _format_float,
                 }
             ),
             use_container_width=True,
@@ -624,7 +645,7 @@ def _render_morning_brief(context: Dict[str, object]) -> None:
     _render_desk_grid(
         [
             ("Regime", regime.regime, regime.confidence.lower()),
-            ("Benchmark Mode", house_model.mode, "active"),
+            ("Benchmark Mode", house_model.selected_mode if house_model.mode == "Committee Winner" else house_model.mode, "active"),
             ("House Sharpe", _format_float(house_stats.get("Sharpe")), "vol-targeted"),
             ("House Leverage", _format_float(house_model.vol_target_leverage), "vs SPY"),
         ]

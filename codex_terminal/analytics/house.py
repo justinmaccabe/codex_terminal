@@ -48,6 +48,7 @@ TACTICAL_MAP = {
 @dataclass
 class HousePortfolioModel:
     mode: str
+    selected_mode: str
     holdings: pd.DataFrame
     series: pd.Series
     stats: Dict[str, float]
@@ -61,16 +62,18 @@ class HousePortfolioModel:
     research_table: pd.DataFrame
     expected_return_table: pd.DataFrame
     crisis_alpha_table: pd.DataFrame
+    change_log_table: pd.DataFrame
     subperiod_table: pd.DataFrame
     diagnostics: List[str]
 
 
-HOUSE_BENCHMARK_MODES = [
+CORE_HOUSE_MODES = [
     "Strategic + Tactical",
     "Max Sharpe",
     "Risk Parity",
     "Blend",
 ]
+HOUSE_BENCHMARK_MODES = CORE_HOUSE_MODES + ["Committee Winner"]
 
 
 SUBPERIOD_WINDOWS: Dict[str, tuple[str, str | None]] = {
@@ -88,7 +91,7 @@ def summarize_house_modes(
     financing_rate: float,
 ) -> pd.DataFrame:
     rows: list[dict[str, float | str]] = []
-    for mode in HOUSE_BENCHMARK_MODES:
+    for mode in CORE_HOUSE_MODES:
         model = build_market_beating_portfolio(
             asset_returns,
             screener,
@@ -108,7 +111,20 @@ def summarize_house_modes(
                 "Leverage": model.vol_target_leverage,
             }
         )
-    return pd.DataFrame(rows)
+    frame = pd.DataFrame(rows)
+    if frame.empty:
+        return frame
+    frame["Committee Score"] = (
+        frame["Net Sharpe"].fillna(-1.0)
+        + 0.35 * frame["Gross Sharpe"].fillna(-1.0)
+        + 0.20 * frame["Net CAGR"].fillna(-0.25)
+        + 1.10 * frame["Net Max Drawdown"].fillna(-0.50)
+    )
+    winner = frame["Committee Score"].idxmax()
+    frame["Winner"] = False
+    if not pd.isna(winner):
+        frame.loc[winner, "Winner"] = True
+    return frame.sort_values("Committee Score", ascending=False).reset_index(drop=True)
 
 
 def _score_tilt_rows(screener: pd.DataFrame) -> pd.DataFrame:
@@ -355,6 +371,63 @@ def _build_research_table(holdings: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _build_change_log_table(
+    holdings: pd.DataFrame,
+    expected_return_table: pd.DataFrame,
+    crisis_alpha_table: pd.DataFrame,
+) -> pd.DataFrame:
+    if holdings.empty:
+        return pd.DataFrame()
+    expected_map = expected_return_table.set_index("Ticker")["Expected Return Score"].to_dict() if not expected_return_table.empty else {}
+    crisis_map = crisis_alpha_table.set_index("Ticker")["Crisis Alpha Score"].to_dict() if not crisis_alpha_table.empty else {}
+    rows: list[dict[str, float | str]] = []
+    for row in holdings.itertuples(index=False):
+        tilt = float(row.tilt_vs_strategic)
+        direction = "Overweight" if tilt > 0 else "Underweight" if tilt < 0 else "Flat"
+        expected_score = float(expected_map.get(row.ticker, 0.0))
+        crisis_score = float(crisis_map.get(row.ticker, 0.0))
+        reasons = []
+        if row.stance in {"Overweight", "Watchlist", "Underweight", "Avoid"}:
+            reasons.append(f"stance {row.stance.lower()}")
+        if expected_score > 0.35:
+            reasons.append("strong expected-return context")
+        elif expected_score < -0.35:
+            reasons.append("weak expected-return context")
+        if crisis_score > 0.35:
+            reasons.append("helpful in stress")
+        elif crisis_score < -0.35:
+            reasons.append("less helpful in stress")
+        if not reasons:
+            reasons.append("kept close to strategic anchor")
+        rows.append(
+            {
+                "Ticker": row.ticker,
+                "Direction": direction,
+                "Strategic Weight": row.strategic_weight,
+                "Current Weight": row.weight,
+                "Tilt": tilt,
+                "Reason": ", ".join(reasons),
+            }
+        )
+    frame = pd.DataFrame(rows)
+    return frame.reindex(frame["Tilt"].abs().sort_values(ascending=False).index).reset_index(drop=True)
+
+
+def _resolve_selected_mode(
+    asset_returns: pd.DataFrame,
+    screener: pd.DataFrame,
+    spy_returns: pd.Series,
+    mode: str,
+    financing_rate: float,
+) -> str:
+    if mode != "Committee Winner":
+        return mode
+    committee = summarize_house_modes(asset_returns, screener, spy_returns, financing_rate)
+    if committee.empty:
+        return "Strategic + Tactical"
+    return str(committee.iloc[0]["Mode"])
+
+
 def _build_subperiod_table(
     house_series: pd.Series,
     spy_series: pd.Series,
@@ -462,7 +535,8 @@ def build_market_beating_portfolio(
     mode: str = "Strategic + Tactical",
     financing_rate: float = 0.04,
 ) -> HousePortfolioModel:
-    holdings = _build_mode_holdings(asset_returns, screener, spy_returns, mode)
+    selected_mode = _resolve_selected_mode(asset_returns, screener, spy_returns, mode, financing_rate)
+    holdings = _build_mode_holdings(asset_returns, screener, spy_returns, selected_mode)
 
     series = portfolio_returns(holdings[["ticker", "weight"]], asset_returns)
     stats = summary_stats(series) if not series.empty else {}
@@ -478,10 +552,12 @@ def build_market_beating_portfolio(
     research_table = _build_research_table(holdings)
     expected_return_table = _expected_return_scores(asset_returns)
     crisis_alpha_table = _crisis_alpha_table(asset_returns, spy_returns)
+    change_log_table = _build_change_log_table(holdings, expected_return_table, crisis_alpha_table)
     subperiod_table = _build_subperiod_table(net_target_vol_series if not net_target_vol_series.empty else target_vol_series, spy_returns)
 
     return HousePortfolioModel(
         mode=mode,
+        selected_mode=selected_mode,
         holdings=holdings,
         series=series,
         stats=stats,
@@ -495,6 +571,7 @@ def build_market_beating_portfolio(
         research_table=research_table,
         expected_return_table=expected_return_table,
         crisis_alpha_table=crisis_alpha_table,
+        change_log_table=change_log_table,
         subperiod_table=subperiod_table,
         diagnostics=diagnostics,
     )
