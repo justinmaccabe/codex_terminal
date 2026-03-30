@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>codex_terminal Scope Brief</title>
+  <style>
+    :root {
+      --ink: #132a3a;
+      --muted: #4e6777;
+      --accent: #0f5b7a;
+      --accent-2: #7e9fb0;
+      --line: #d5e1e8;
+      --paper: #f7fafc;
+    }
+    body {
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      margin: 44px auto;
+      max-width: 860px;
+      line-height: 1.5;
+      background: #ffffff;
+      padding: 0 28px 40px;
+    }
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, #f8fbfd 0%, #eef5f9 100%);
+      padding: 28px 30px;
+      margin-bottom: 26px;
+    }
+    .eyebrow {
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--accent);
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1 {
+      font-size: 34px;
+      line-height: 1.1;
+      margin: 0 0 8px;
+      color: #0c2230;
+    }
+    .subtitle {
+      font-size: 17px;
+      color: var(--muted);
+      margin: 0;
+    }
+    h2 {
+      font-size: 20px;
+      margin: 28px 0 10px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid var(--line);
+      color: #12354a;
+    }
+    h3 {
+      font-size: 16px;
+      margin: 18px 0 8px;
+      color: #18455f;
+    }
+    p {
+      margin: 10px 0;
+    }
+    ul {
+      margin: 8px 0 14px 22px;
+    }
+    li {
+      margin: 5px 0;
+    }
+    .grid {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 14px;
+    }
+    .grid th,
+    .grid td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    .grid th {
+      background: var(--paper);
+      text-align: left;
+      color: #16374b;
+    }
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: #f5fafc;
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .small {
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .footer {
+      margin-top: 34px;
+      font-size: 12px;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+    code {
+      font-family: Menlo, Consolas, monospace;
+      background: #f2f6f8;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <p class="eyebrow">Project Scope Brief</p>
+    <h1>codex_terminal</h1>
+    <p class="subtitle">A personal institutional-style cross-asset research and portfolio decision terminal built in Streamlit.</p>
+  </div>
+
+  <h2>1. Project Intent</h2>
+  <p><strong>codex_terminal</strong> is not a generic retail portfolio tracker. It is a personal research terminal designed to test, monitor, and refine a “Market Beating Portfolio” grounded in diversified, liquid ETF exposures, academic factor theory, regime awareness, and disciplined benchmark comparison.</p>
+  <p>The product should combine the best scoped elements of Portfolio Visualizer, a Bloomberg terminal, and a Citadel-style market dashboard without trying to clone any of them fully. The app must remain focused, interpretable, and practical.</p>
+
+  <h2>2. Core Objective</h2>
+  <p>The primary objective is to help the user answer two questions with clarity:</p>
+  <ul>
+    <li><strong>What should the Market Beating Portfolio own now and why?</strong></li>
+    <li><strong>How does any input portfolio differ from SPY, the Vanguard target retirement benchmark, and the Market Beating Portfolio?</strong></li>
+  </ul>
+  <p>The app should support both ongoing market awareness and medium-to-long horizon portfolio research. It should be academically informed, ETF-implementable, and explicit about the drivers of performance, risk, and portfolio construction.</p>
+
+  <h2>3. Product Principles</h2>
+  <ul>
+    <li>Use liquid, low-cost, deep ETF proxies rather than individual securities.</li>
+    <li>Keep the implementation executable in the real world, even when the theory layer is more sophisticated.</li>
+    <li>Prefer transparency over black-box outputs.</li>
+    <li>Always benchmark to <code>SPY</code>.</li>
+    <li>Treat macro regime and factor context as explanatory infrastructure, not decoration.</li>
+    <li>Allow strong visual density if the information is useful.</li>
+    <li>Optimize for the owner’s use first. Public-facing usability matters later and should not distort the core design.</li>
+  </ul>
+
+  <h2>4. V1 Product Modules</h2>
+  <table class="grid">
+    <tr>
+      <th>Module</th>
+      <th>Purpose</th>
+      <th>Primary Output</th>
+    </tr>
+    <tr>
+      <td><strong>Terminal</strong></td>
+      <td>Top-level market snapshot across asset classes, factors, and macro regime.</td>
+      <td>What changed, what matters, what is leading, what is deteriorating.</td>
+    </tr>
+    <tr>
+      <td><strong>Screener</strong></td>
+      <td>Cross-asset and sub-bucket ranking engine using multiple signal families.</td>
+      <td>Prescriptive rankings such as overweight, neutral, underweight, avoid, and watchlist.</td>
+    </tr>
+    <tr>
+      <td><strong>Portfolio Lab</strong></td>
+      <td>Build, backtest, optimize, stress-test, and explain the Market Beating Portfolio.</td>
+      <td>Strategic core, tactical overlay, risk-targeted outputs, and optimizer comparisons.</td>
+    </tr>
+    <tr>
+      <td><strong>Compare</strong></td>
+      <td>Read an input portfolio and compare it against benchmarks.</td>
+      <td>Exposure diagnostics, performance differences, factor differences, and qualitative commentary.</td>
+    </tr>
+    <tr>
+      <td><strong>Macro</strong></td>
+      <td>Rules-based regime dashboard using FRED data.</td>
+      <td>Current regime, regime transitions, and expected implications across major asset sleeves.</td>
+    </tr>
+    <tr>
+      <td><strong>Learn</strong></td>
+      <td>Short academic interpretation layer.</td>
+      <td>What the user may be missing, what the market is teaching, and why current conditions matter.</td>
+    </tr>
+  </table>
+
+  <h2>5. Investment Framework</h2>
+  <h3>5.1 Strategic View</h3>
+  <p>The house philosophy is that a levered, diversified portfolio across real and financial assets can outperform a pure equity benchmark over long horizons when implemented with discipline and risk awareness. The app should reflect the influence of Bogle-style low-cost implementation, Fama-French style factor thinking, AQR-style diversification and premia awareness, and trend/momentum sensitivity.</p>
+
+  <h3>5.2 Implementation View</h3>
+  <p>The implementation should remain ETF-based and should not rely on single names or expensive active products. The system should use approved ETF providers only, except for the Vanguard target retirement benchmark, which may rely on fund NAV data.</p>
+
+  <h3>5.3 Portfolio Structure</h3>
+  <p>The Market Beating Portfolio should be modeled as:</p>
+  <ul>
+    <li><strong>Strategic core</strong>: long-run diversified exposures across major asset classes and factor sleeves.</li>
+    <li><strong>Tactical overlay</strong>: dynamic adjustments based on screener signals and regime context.</li>
+    <li><strong>Risk target</strong>: annualized realized volatility aligned to <code>SPY</code> as the default risk anchor.</li>
+  </ul>
+
+  <h2>6. Approved Data And Instrument Policy</h2>
+  <h3>6.1 Primary Data Sources</h3>
+  <ul>
+    <li><strong>Yahoo Finance / yfinance</strong> for ETF price history and daily market monitoring.</li>
+    <li><strong>FRED</strong> for macro data and regime classification.</li>
+    <li><strong>Additional free sources</strong> only if necessary and only after user approval.</li>
+  </ul>
+
+  <h3>6.2 Approved ETF Providers</h3>
+  <ul>
+    <li>Vanguard</li>
+    <li>iShares</li>
+    <li>SPDR</li>
+    <li>Invesco</li>
+    <li>Schwab</li>
+    <li>Avantis</li>
+    <li>Alpha Architect</li>
+    <li>JPMorgan</li>
+    <li>AQR</li>
+    <li>WisdomTree</li>
+    <li>PIMCO</li>
+  </ul>
+
+  <h3>6.3 Instrument Rules</h3>
+  <ul>
+    <li>ETF-only implementation for the house portfolio and screener.</li>
+    <li>Broad and specialty ETF proxies are allowed within the approved-provider list.</li>
+    <li>Mutual funds are out of scope except for the Vanguard target retirement benchmark series.</li>
+    <li>Input portfolios may contain non-ETF holdings, but the system must still analyze their exposures as well as possible.</li>
+  </ul>
+
+  <h2>7. Asset Coverage</h2>
+  <p>V1 should be broad. It is expected to cover both asset-class proxies and sub-bucket exposures where possible. Coverage should include, at minimum:</p>
+  <ul>
+    <li>US equities across market cap and style buckets</li>
+    <li>International developed equities</li>
+    <li>Emerging market equities</li>
+    <li>International small cap and international value where available</li>
+    <li>US Treasuries across duration buckets</li>
+    <li>Inflation-linked bonds where relevant</li>
+    <li>Credit proxies where reliable ETF implementation exists</li>
+    <li>REITs</li>
+    <li>Commodities</li>
+    <li>Gold and related real-asset hedges</li>
+    <li>Managed-futures proxies where feasible via approved ETFs</li>
+    <li>Currency-linked exposures or proxies where practical</li>
+    <li>Factor sleeves including value, momentum, carry, trend, and size where tradable proxies exist</li>
+  </ul>
+
+  <h2>8. Screener Design</h2>
+  <p>The screener is a first-class product, not a side widget. It should operate at both the broad asset-class level and the sub-bucket level.</p>
+
+  <h3>8.1 Signal Families</h3>
+  <ul>
+    <li>Absolute momentum</li>
+    <li>Relative momentum</li>
+    <li>Trend strength</li>
+    <li>Carry where proxy construction is credible</li>
+    <li>Value where proxy construction is credible</li>
+    <li>Volatility-adjusted return strength</li>
+    <li>Macro regime fit</li>
+    <li>Medium-term expected return context as a displayed reference layer</li>
+  </ul>
+
+  <h3>8.2 Output Format</h3>
+  <p>The screener should show:</p>
+  <ul>
+    <li>Each signal family separately for interpretability.</li>
+    <li>A blended composite score for decision support.</li>
+    <li>Prescriptive labels such as overweight, neutral, underweight, avoid, and watchlist.</li>
+    <li>Short commentary explaining why an asset or sleeve is scoring well or poorly.</li>
+  </ul>
+
+  <h3>8.3 Blend Philosophy</h3>
+  <p>The blended score should satisfy both academic and trading sensibilities. The initial framework should therefore separate:</p>
+  <ul>
+    <li><strong>Structural signals</strong>: value, carry, and medium-term expected return context.</li>
+    <li><strong>Tactical signals</strong>: trend, absolute momentum, relative momentum, and volatility-adjusted strength.</li>
+    <li><strong>Macro filter</strong>: regime fit used to frame interpretation or modestly influence conviction rather than dominate the model.</li>
+  </ul>
+  <p>This preserves transparency while still producing actionable ranking outputs.</p>
+
+  <h2>9. Portfolio Lab And Optimization Philosophy</h2>
+  <h3>9.1 Main Purpose</h3>
+  <p>The Portfolio Lab exists to design, test, and refine the Market Beating Portfolio. It should help answer what to own, how much to own, and how the portfolio behaves under different conditions.</p>
+
+  <h3>9.2 Required Functions</h3>
+  <ul>
+    <li>Portfolio construction by manual weights</li>
+    <li>Portfolio construction by target volatility</li>
+    <li>Portfolio construction by target risk contribution</li>
+    <li>Historical backtesting</li>
+    <li>Stress testing across major downturns and regime shifts</li>
+    <li>Benchmark-relative diagnostics</li>
+    <li>Mean-variance optimization</li>
+    <li>Stress-aware evaluation beyond mean-variance</li>
+  </ul>
+
+  <h3>9.3 Tail-Risk Handling</h3>
+  <p>V1 should not pretend to “solve” tail risk through a single formula. Instead, it should evaluate candidate portfolios using evidence from historical stress periods and prefer constructions with stronger downside resilience. The portfolio design should learn from:</p>
+  <ul>
+    <li>drawdown behavior</li>
+    <li>downside deviation and Sortino-like measures</li>
+    <li>correlation behavior in stress</li>
+    <li>performance during inflation shocks, growth shocks, and liquidity-driven selloffs</li>
+    <li>how diversifiers and tactical sleeves behaved during prior crises</li>
+  </ul>
+  <p>The optimizer should therefore be stress-aware, not just variance-aware.</p>
+
+  <h3>9.4 Leverage Policy</h3>
+  <p>For v1, the recommended approach is <strong>volatility-targeted leverage</strong> with a user-visible financing-cost assumption. This is preferable to a naive fixed-leverage rule and less complex than a full brokerage margin engine. The default objective is to scale the diversified portfolio toward <code>SPY</code> realized volatility while making leverage usage and financing drag explicit.</p>
+
+  <h3>9.5 Constraints</h3>
+  <ul>
+    <li>Approved ETF universe only</li>
+    <li>Soft concentration limits with visible warnings above house “hard limit” thresholds</li>
+    <li>Volatility-triggered rebalancing preferred over calendar-based rebalancing</li>
+    <li>No tax optimization</li>
+  </ul>
+
+  <h2>10. Benchmark Framework</h2>
+  <h3>10.1 Required Benchmarks</h3>
+  <ul>
+    <li><code>SPY</code> as the constant primary benchmark</li>
+    <li>The house <strong>Market Beating Portfolio</strong></li>
+    <li>A Vanguard target retirement benchmark portfolio where possible</li>
+  </ul>
+
+  <h3>10.2 Vanguard Benchmark Hierarchy</h3>
+  <ul>
+    <li>Prefer actual NAV/history if it can be fetched reliably for free.</li>
+    <li>If automated fetch fails, flag the benchmark as degraded.</li>
+    <li>Prompt the user for the most recent close or NAV.</li>
+    <li>Continue analysis with a clear warning about benchmark quality and historical limitations.</li>
+  </ul>
+
+  <h2>11. Portfolio Comparison Engine</h2>
+  <p>The comparison engine should ingest an uploaded portfolio and explain how it differs from <code>SPY</code>, the Vanguard target retirement benchmark, and the Market Beating Portfolio.</p>
+
+  <h3>11.1 Comparison Outputs</h3>
+  <ul>
+    <li>Performance statistics</li>
+    <li>Risk statistics</li>
+    <li>Rolling-return and drawdown comparisons</li>
+    <li>Factor exposure and decomposition</li>
+    <li>Asset-class exposure differences</li>
+    <li>Qualitative commentary tied to the current macro regime</li>
+    <li>Explanation of what risks the input portfolio is more or less exposed to</li>
+  </ul>
+
+  <h3>11.2 Analysis Style</h3>
+  <p>The output must be both quantitative and qualitative. It should not stop at “this portfolio underperformed.” It should explain what the portfolio is structurally exposed to, how that differs from the benchmarks, and why those differences matter under the current regime.</p>
+
+  <h2>12. Macro Regime Engine</h2>
+  <p>The macro layer should be rules-based and driven by FRED data. V1 should use a four-quadrant framework:</p>
+  <ul>
+    <li>Growth up / inflation up</li>
+    <li>Growth up / inflation down</li>
+    <li>Growth down / inflation up</li>
+    <li>Growth down / inflation down</li>
+  </ul>
+  <p>This regime engine should support the screener, the terminal summary, and the portfolio commentary. It should help explain what is happening rather than replace the market data itself.</p>
+
+  <h2>13. Analytics Required In V1</h2>
+  <ul>
+    <li>CAGR</li>
+    <li>Volatility</li>
+    <li>Sharpe ratio</li>
+    <li>Sortino ratio</li>
+    <li>Maximum drawdown</li>
+    <li>Rolling returns</li>
+    <li>Correlation and correlation shifts</li>
+    <li>Factor exposure and regression-based attribution</li>
+    <li>Efficient frontier or similar optimizer visual outputs</li>
+    <li>Monte Carlo analysis if feasible within scope</li>
+    <li>Rebalancing analysis</li>
+    <li>Regime-based performance slices</li>
+  </ul>
+
+  <h2>14. Expected Return Reference Layer</h2>
+  <p>The app should incorporate mid-term capital market expectations from AQR as a displayed reference layer where possible. In v1, this should be used for context and comparison, not as a direct optimizer input. A useful presentation would highlight how the Market Beating Portfolio’s exposures align with or differ from the AQR capital market outlook.</p>
+
+  <h2>15. User Experience Direction</h2>
+  <ul>
+    <li>Separate modules rather than a command-line interface in v1</li>
+    <li>High information density is acceptable and even desirable if navigable</li>
+    <li>Institutional look and feel preferred over consumer-finance softness</li>
+    <li>Commentary should be concise, useful, and academically informed</li>
+    <li>Charts and tables should answer real portfolio and market questions, not fill space</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Important product stance:</strong> this is not meant to be endlessly customizable for external users. The house framework should remain opinionated. Other users may compare their portfolios to the benchmark stack, but they are not the product-design authority.
+  </div>
+
+  <h2>16. Strict Non-Goals For V1</h2>
+  <ul>
+    <li>No order execution or brokerage integration</li>
+    <li>No single-stock research workflow</li>
+    <li>No tax-aware optimization</li>
+    <li>No live news ingestion from Bloomberg or WSJ in v1</li>
+    <li>No full Bloomberg-style command terminal in v1</li>
+    <li>No embedded LLM/chat assistant in v1</li>
+    <li>No attempt to replicate every feature of Portfolio Visualizer, Bloomberg, or Citadel tooling</li>
+  </ul>
+
+  <h2>17. Likely V2+ Expansion Areas</h2>
+  <ul>
+    <li>LLM-assisted market commentary and portfolio interpretation</li>
+    <li>Smarter benchmark ingestion and document parsing</li>
+    <li>Richer signal calibration and weighting research</li>
+    <li>News and narrative overlays from approved premium sources</li>
+    <li>Snowflake-oriented deployment architecture</li>
+  </ul>
+
+  <h2>18. Summary Scope Statement</h2>
+  <p><strong>codex_terminal</strong> v1 is a personal cross-asset decision terminal that combines a market screener, a stress-aware portfolio research lab, a benchmark comparison engine, and a macro regime dashboard. It is built to help the user monitor what is working, understand why it is working, and systematically design a diversified ETF-based portfolio intended to outperform <code>SPY</code> over time at comparable realized risk.</p>
+
+  <p class="footer">Prepared on 2026-03-26 for project scoping. This document captures the agreed design direction before coding begins.</p>
+</body>
+</html>

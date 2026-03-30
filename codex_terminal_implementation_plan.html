@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>codex_terminal Implementation Plan</title>
+  <style>
+    :root {
+      --ink: #112734;
+      --muted: #566d7b;
+      --accent: #0b647f;
+      --line: #d6e1e8;
+      --paper: #f7fafc;
+      --soft: #eef6fa;
+    }
+    body {
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      margin: 40px auto;
+      max-width: 900px;
+      line-height: 1.5;
+      background: #fff;
+      padding: 0 28px 44px;
+    }
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, #f8fbfd 0%, #edf5f9 100%);
+      padding: 28px 30px;
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--accent);
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      color: #0c2431;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    h2 {
+      margin: 28px 0 10px;
+      font-size: 21px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+      color: #12384a;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 16px;
+      color: #184b63;
+    }
+    p { margin: 10px 0; }
+    ul, ol { margin: 8px 0 14px 22px; }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--paper);
+      text-align: left;
+      color: #16394c;
+    }
+    .callout {
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    code {
+      font-family: Menlo, Consolas, monospace;
+      background: #f2f6f8;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <p class="eyebrow">Implementation Plan</p>
+    <h1>codex_terminal</h1>
+    <p class="subtitle">Phased engineering plan for building v1 from the approved scope, product spec, and methodology.</p>
+  </div>
+
+  <h2>1. Objective</h2>
+  <p>This plan turns the approved documents into an execution sequence. The goal is to build a working v1 without architectural drift, premature bells and whistles, or avoidable rework.</p>
+
+  <h2>2. Build Strategy</h2>
+  <p>Build the app in layers, not pages first. The order should be:</p>
+  <ol>
+    <li>data and metadata foundation,</li>
+    <li>core analytics engines,</li>
+    <li>portfolio and comparison logic,</li>
+    <li>UI assembly and interpretation layer.</li>
+  </ol>
+  <p>This avoids building pretty empty pages before the underlying logic is stable.</p>
+
+  <h2>3. Phase Breakdown</h2>
+  <table>
+    <tr>
+      <th>Phase</th>
+      <th>Main Goal</th>
+      <th>Primary Deliverable</th>
+    </tr>
+    <tr>
+      <td><strong>Phase 1</strong></td>
+      <td>Project skeleton and data layer</td>
+      <td>Runnable Streamlit app shell plus cached market-data fetch pipeline</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 2</strong></td>
+      <td>Universe metadata and benchmark plumbing</td>
+      <td>Frozen ETF universe and benchmark ingestion logic</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 3</strong></td>
+      <td>Macro and screener engines</td>
+      <td>Working signal engine and regime engine</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 4</strong></td>
+      <td>Portfolio Lab</td>
+      <td>Backtesting, optimization, and stress-aware portfolio analytics</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 5</strong></td>
+      <td>Comparison engine</td>
+      <td>Uploaded portfolio diagnostics versus benchmark stack</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 6</strong></td>
+      <td>Terminal and Learn layers</td>
+      <td>High-density summary page and concise interpretation layer</td>
+    </tr>
+    <tr>
+      <td><strong>Phase 7</strong></td>
+      <td>Hardening</td>
+      <td>Validation, error handling, data-degradation states, and cleanup</td>
+    </tr>
+  </table>
+
+  <h2>4. Detailed Work Plan</h2>
+  <h3>Phase 1: Project Skeleton And Data Layer</h3>
+  <ul>
+    <li>Create the Streamlit app structure and navigation shell.</li>
+    <li>Set up package structure for data, analytics, config, and UI modules.</li>
+    <li>Implement cached price-history fetching from <code>yfinance</code>.</li>
+    <li>Implement cached macro-series fetching from FRED.</li>
+    <li>Add common utilities for return calculations, resampling, and missing-data handling.</li>
+    <li>Add visible status reporting for fetch failures and degraded series.</li>
+  </ul>
+
+  <h3>Phase 2: Universe Metadata And Benchmarks</h3>
+  <ul>
+    <li>Encode the frozen ETF universe and sleeve metadata from the methodology doc.</li>
+    <li>Define sleeve tags: asset class, region, factor, diversifier, inflation sensitivity, duration sensitivity, strategic-core eligibility, tactical-overlay eligibility.</li>
+    <li>Implement permanent benchmark handling for <code>SPY</code>.</li>
+    <li>Implement the Vanguard benchmark fetch attempt and manual fallback workflow.</li>
+    <li>Create benchmark state objects that distinguish between full-history, partial-history, and point-only availability.</li>
+  </ul>
+
+  <h3>Phase 3: Macro And Screener Engines</h3>
+  <ul>
+    <li>Implement the four-quadrant macro regime model using FRED inputs.</li>
+    <li>Implement tactical signal calculations: absolute momentum, relative momentum, trend, vol-adjusted strength.</li>
+    <li>Implement structural signal placeholders and credible first-pass logic for value and carry where available.</li>
+    <li>Implement block-level score normalization and composite scoring.</li>
+    <li>Implement prescriptive label mapping: overweight, neutral, underweight, avoid, watchlist.</li>
+    <li>Add signal availability and confidence reporting where a sleeve lacks full signal coverage.</li>
+  </ul>
+
+  <h3>Phase 4: Portfolio Lab</h3>
+  <ul>
+    <li>Implement portfolio return engine.</li>
+    <li>Implement portfolio statistics engine.</li>
+    <li>Implement rolling-return and drawdown analytics.</li>
+    <li>Implement target-volatility logic anchored to <code>SPY</code>.</li>
+    <li>Implement mean-variance optimizer with practical constraints.</li>
+    <li>Implement target-risk-contribution construction.</li>
+    <li>Implement stress-aware scoring overlays using downturn windows and downside metrics.</li>
+    <li>Implement leverage and financing-drag reporting.</li>
+    <li>Implement weight-drift and vol-triggered rebalance logic.</li>
+  </ul>
+
+  <h3>Phase 5: Comparison Engine</h3>
+  <ul>
+    <li>Implement uploaded portfolio schema validation.</li>
+    <li>Implement direct mapping of known ETFs to sleeve metadata.</li>
+    <li>Implement fallback classification for unknown ETFs and unresolved holdings.</li>
+    <li>Implement comparison tables against <code>SPY</code>, Vanguard benchmark, and Market Beating Portfolio.</li>
+    <li>Implement benchmark-relative factor and sleeve exposure diagnostics.</li>
+    <li>Generate concise regime-aware commentary on exposure differences.</li>
+  </ul>
+
+  <h3>Phase 6: Terminal And Learn Layers</h3>
+  <ul>
+    <li>Assemble the Terminal page from existing screener, benchmark, and macro outputs.</li>
+    <li>Add the “What changed / What matters / What to watch” summary box.</li>
+    <li>Add the lightweight Learn page with short academic interpretation tied to live outputs.</li>
+    <li>Refine information density and chart hierarchy for institutional usability.</li>
+  </ul>
+
+  <h3>Phase 7: Hardening</h3>
+  <ul>
+    <li>Handle missing data cleanly throughout the app.</li>
+    <li>Handle partial benchmark histories.</li>
+    <li>Test unstable tickers and degraded fetch states.</li>
+    <li>Validate analytics for obvious numerical errors.</li>
+    <li>Reduce redundant API pulls through caching and shared intermediate data.</li>
+    <li>Clean up layout, copy, and warnings.</li>
+  </ul>
+
+  <h2>5. Suggested File / Module Shape</h2>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Responsibility</th>
+    </tr>
+    <tr><td><code>app.py</code> or equivalent</td><td>Main Streamlit entry and navigation</td></tr>
+    <tr><td><code>config/</code></td><td>Universe definitions, benchmark rules, signal parameters</td></tr>
+    <tr><td><code>data/</code></td><td>yfinance and FRED fetching, caching, and normalization</td></tr>
+    <tr><td><code>analytics/</code></td><td>Returns, stats, regressions, optimization, stress analysis</td></tr>
+    <tr><td><code>portfolio/</code></td><td>Portfolio builder, benchmark logic, upload parsing</td></tr>
+    <tr><td><code>ui/</code></td><td>Page rendering and reusable components</td></tr>
+  </table>
+
+  <h2>6. Minimum Acceptance Criteria By Phase</h2>
+  <table>
+    <tr>
+      <th>Phase</th>
+      <th>Done Means</th>
+    </tr>
+    <tr><td>1</td><td>The app runs locally and can fetch/cache market and macro data for the starter universe.</td></tr>
+    <tr><td>2</td><td>The full universe and benchmark stack can be loaded with visible status for degraded benchmarks.</td></tr>
+    <tr><td>3</td><td>The Screener and Macro pages produce stable ranks and regime labels.</td></tr>
+    <tr><td>4</td><td>The Portfolio Lab can build, backtest, and compare candidate portfolios.</td></tr>
+    <tr><td>5</td><td>An uploaded portfolio can be validated and compared to all benchmarks.</td></tr>
+    <tr><td>6</td><td>The Terminal page summarizes the system coherently and the Learn page adds concise interpretation.</td></tr>
+    <tr><td>7</td><td>Common failure modes are visible, analytics are credible, and the app is usable end to end.</td></tr>
+  </table>
+
+  <h2>7. Key Risks To Manage During Build</h2>
+  <ul>
+    <li>Scope creep from trying to support too many ETFs too early.</li>
+    <li>Overfitted screener logic before the first honest baseline exists.</li>
+    <li>Weak value or carry proxies being treated as high-confidence signals.</li>
+    <li>Benchmark fragility around Vanguard data access.</li>
+    <li>UI bloat before analytics are stable.</li>
+  </ul>
+
+  <h2>8. Build Recommendation</h2>
+  <p>The correct move now is to start implementation with Phases 1 and 2 together. Those phases create the foundation for every other module and will flush out data and universe issues early.</p>
+
+  <div class="callout">
+    <strong>Recommended start:</strong> begin coding the app skeleton, data fetch layer, universe config, and benchmark plumbing first. Do not start with page styling or optimization UI.
+  </div>
+
+  <p class="footer">Prepared on 2026-03-26 for <strong>codex_terminal</strong>. This document is the implementation sequence to follow when v1 coding begins.</p>
+</body>
+</html>

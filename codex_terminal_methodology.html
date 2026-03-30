@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>codex_terminal Methodology Spec</title>
+  <style>
+    :root {
+      --ink: #102735;
+      --muted: #536b7a;
+      --accent: #0c6380;
+      --line: #d4e0e8;
+      --paper: #f6fafc;
+      --soft: #eef6fa;
+    }
+    body {
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      margin: 40px auto;
+      max-width: 940px;
+      line-height: 1.5;
+      background: #fff;
+      padding: 0 28px 44px;
+    }
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, #f8fbfd 0%, #edf5f9 100%);
+      padding: 28px 30px;
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--accent);
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      color: #0c2431;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    h2 {
+      margin: 28px 0 10px;
+      font-size: 21px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+      color: #12384a;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 16px;
+      color: #184b63;
+    }
+    p { margin: 10px 0; }
+    ul, ol { margin: 8px 0 14px 22px; }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--paper);
+      text-align: left;
+      color: #16394c;
+    }
+    .callout {
+      background: var(--soft);
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    code {
+      font-family: Menlo, Consolas, monospace;
+      background: #f2f6f8;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <p class="eyebrow">Methodology Specification</p>
+    <h1>codex_terminal</h1>
+    <p class="subtitle">Initial universe, signal framework, macro rules, benchmark logic, and input schemas for v1 implementation.</p>
+  </div>
+
+  <h2>1. Purpose</h2>
+  <p>This document freezes the first-pass methodology for <strong>codex_terminal</strong> v1. It is designed to be good enough to build against without pretending that every research choice is permanent. The aim is disciplined first implementation, not premature perfection.</p>
+
+  <h2>2. Methodology Principles</h2>
+  <ul>
+    <li>Prefer simplicity, transparency, and stability over a fragile “optimal” model.</li>
+    <li>Use liquid ETF proxies from approved providers only.</li>
+    <li>Separate structural and tactical signals.</li>
+    <li>Use macro regime as context and mild adjustment, not a black-box controller.</li>
+    <li>Let the portfolio lab be stress-aware, not only variance-aware.</li>
+    <li>Expose uncertainty when a proxy or data source is weak.</li>
+  </ul>
+
+  <h2>3. Initial V1 ETF Universe</h2>
+  <p>This is the frozen starter universe for the first implementation pass. It is intentionally broad but not exhaustive.</p>
+
+  <table>
+    <tr>
+      <th>Sleeve</th>
+      <th>Primary Ticker</th>
+      <th>Provider</th>
+      <th>Purpose</th>
+      <th>Notes</th>
+    </tr>
+    <tr><td>US Large Cap</td><td>SPY</td><td>SPDR</td><td>Primary equity benchmark and beta anchor</td><td>Always-on benchmark</td></tr>
+    <tr><td>US Total Market</td><td>VTI</td><td>Vanguard</td><td>Broad US equity proxy</td><td>Useful alternative broad beta lens</td></tr>
+    <tr><td>US Small Cap</td><td>VB</td><td>Vanguard</td><td>US small-cap exposure</td><td>Simple small-cap sleeve</td></tr>
+    <tr><td>US Value</td><td>VTV</td><td>Vanguard</td><td>US large-cap value proxy</td><td>Clean starting value sleeve</td></tr>
+    <tr><td>US Small Value</td><td>VBR</td><td>Vanguard</td><td>Stronger size plus value sleeve</td><td>Academic relevance</td></tr>
+    <tr><td>US Momentum</td><td>MTUM</td><td>iShares</td><td>Momentum factor proxy</td><td>Used cautiously as factor ETF proxy</td></tr>
+    <tr><td>International Developed</td><td>VEA</td><td>Vanguard</td><td>Developed ex-US equity</td><td>Core international sleeve</td></tr>
+    <tr><td>International Small Cap</td><td>VSS</td><td>Vanguard</td><td>International small-cap exposure</td><td>Proxy for academic small-cap tilt outside US</td></tr>
+    <tr><td>International Value</td><td>IVLU</td><td>iShares</td><td>International value factor proxy</td><td>Acceptable first-pass value sleeve</td></tr>
+    <tr><td>Emerging Markets</td><td>VWO</td><td>Vanguard</td><td>Broad EM exposure</td><td>Core EM sleeve</td></tr>
+    <tr><td>EM Value</td><td>AVES</td><td>Avantis</td><td>EM value-tilted exposure</td><td>Approved specialty factor sleeve</td></tr>
+    <tr><td>Short Treasuries</td><td>VGSH</td><td>Vanguard</td><td>Short-duration Treasury proxy</td><td>Cash-adjacent ballast</td></tr>
+    <tr><td>Intermediate Treasuries</td><td>VGIT</td><td>Vanguard</td><td>Intermediate Treasury sleeve</td><td>Core rates exposure</td></tr>
+    <tr><td>Long Treasuries</td><td>TLT</td><td>iShares</td><td>Long-duration hedge sleeve</td><td>Stress and duration sensitivity</td></tr>
+    <tr><td>TIPS</td><td>TIP</td><td>iShares</td><td>Inflation-linked bonds</td><td>Inflation-sensitive ballast</td></tr>
+    <tr><td>Broad Bonds</td><td>BND</td><td>Vanguard</td><td>Aggregate bond proxy</td><td>Useful comparison sleeve</td></tr>
+    <tr><td>REITs</td><td>VNQ</td><td>Vanguard</td><td>Listed real estate</td><td>Real asset proxy</td></tr>
+    <tr><td>Broad Commodities</td><td>PDBC</td><td>Invesco</td><td>Broad commodity exposure</td><td>ETF implementation without K-1</td></tr>
+    <tr><td>Gold</td><td>GLDM</td><td>SPDR</td><td>Gold hedge sleeve</td><td>Cost-efficient gold proxy</td></tr>
+    <tr><td>Managed Futures</td><td>WTMF</td><td>WisdomTree</td><td>Managed-futures proxy</td><td>Approved-provider managed-futures sleeve</td></tr>
+    <tr><td>Cash / Ultra-Short</td><td>SGOV</td><td>iShares</td><td>Cash proxy</td><td>Funding and collateral reference sleeve</td></tr>
+  </table>
+
+  <h2>4. Sleeve Classification Framework</h2>
+  <p>Each instrument in the universe should be tagged with:</p>
+  <ul>
+    <li>asset class,</li>
+    <li>region,</li>
+    <li>style or factor exposure,</li>
+    <li>inflation sensitivity,</li>
+    <li>duration sensitivity,</li>
+    <li>risk-on or diversifier classification,</li>
+    <li>strategic-core eligibility,</li>
+    <li>tactical-overlay eligibility.</li>
+  </ul>
+
+  <h2>5. Screener Signal Methodology</h2>
+  <h3>5.1 Tactical Signals</h3>
+  <table>
+    <tr>
+      <th>Signal</th>
+      <th>Definition</th>
+      <th>Default Lookback</th>
+      <th>Output Form</th>
+    </tr>
+    <tr><td>Absolute Momentum</td><td>Total return over lookback window</td><td>1, 3, 6, 12 months</td><td>Standardized z-score and percentile rank</td></tr>
+    <tr><td>Relative Momentum</td><td>Return relative to cross-sectional universe median or average</td><td>3, 6, 12 months</td><td>Cross-sectional rank</td></tr>
+    <tr><td>Trend</td><td>Price vs moving-average structure</td><td>50-day and 200-day</td><td>Binary and graded trend score</td></tr>
+    <tr><td>Vol-Adjusted Strength</td><td>Return divided by realized volatility</td><td>3 and 12 months</td><td>Scaled score</td></tr>
+  </table>
+
+  <h3>5.2 Structural Signals</h3>
+  <table>
+    <tr>
+      <th>Signal</th>
+      <th>Definition</th>
+      <th>V1 Rule</th>
+      <th>Caveat</th>
+    </tr>
+    <tr><td>Value</td><td>Proxy valuation attractiveness</td><td>Use ETF-level metrics only if source is stable; otherwise use sleeve-level relative expected-return context or disable</td><td>Do not fake precision</td></tr>
+    <tr><td>Carry</td><td>Income, roll, or term-structure-related attractiveness</td><td>Use only where a credible sleeve-level proxy exists, such as rates slope or broad carry approximation</td><td>Not all sleeves support this cleanly</td></tr>
+    <tr><td>Expected Return Context</td><td>AQR medium-term expectation display layer</td><td>Reference-only contextual score</td><td>Display, not optimizer input</td></tr>
+  </table>
+
+  <h3>5.3 Macro Signal</h3>
+  <p>Macro regime fit should be a sleeve-level compatibility score based on the current FRED-derived quadrant. This should mildly adjust conviction rather than dominate the ranking system.</p>
+
+  <h3>5.4 Standardization Rule</h3>
+  <p>All continuous screener signals should be normalized into comparable ranks or z-scores before being blended. V1 should avoid exotic transformations.</p>
+
+  <h3>5.5 Composite Score Rule</h3>
+  <p>The initial v1 composite should use block weights rather than arbitrary per-signal hand tuning.</p>
+  <ul>
+    <li><strong>Tactical block:</strong> 60 percent of total composite</li>
+    <li><strong>Structural block:</strong> 30 percent of total composite</li>
+    <li><strong>Macro block:</strong> 10 percent of total composite</li>
+  </ul>
+  <p>Within each block, signals are equal-weighted if available. If a signal is unavailable for a sleeve, redistribute weight evenly across available signals within that block.</p>
+
+  <h3>5.6 Prescriptive Mapping</h3>
+  <table>
+    <tr>
+      <th>Composite Percentile</th>
+      <th>Stance</th>
+    </tr>
+    <tr><td>Top 20%</td><td>Overweight</td></tr>
+    <tr><td>40% to 80%</td><td>Neutral</td></tr>
+    <tr><td>20% to 40%</td><td>Underweight</td></tr>
+    <tr><td>Bottom 20%</td><td>Avoid</td></tr>
+  </table>
+  <p><code>Watchlist</code> is an override label for assets with rapidly improving tactical signals but insufficient composite support for <code>Overweight</code>.</p>
+
+  <h2>6. Macro Regime Methodology</h2>
+  <h3>6.1 Framework</h3>
+  <p>Use a four-quadrant rules-based model:</p>
+  <ul>
+    <li>Growth up / inflation up</li>
+    <li>Growth up / inflation down</li>
+    <li>Growth down / inflation up</li>
+    <li>Growth down / inflation down</li>
+  </ul>
+
+  <h3>6.2 V1 Inputs</h3>
+  <table>
+    <tr>
+      <th>Macro Concept</th>
+      <th>Default FRED Directional Proxy</th>
+      <th>Purpose</th>
+    </tr>
+    <tr><td>Growth</td><td>Industrial Production and unemployment trend proxy</td><td>Classify growth direction</td></tr>
+    <tr><td>Inflation</td><td>CPI YoY and inflation trend proxy</td><td>Classify inflation direction</td></tr>
+    <tr><td>Policy / Rates Context</td><td>Fed Funds and Treasury curve slope</td><td>Context only in v1</td></tr>
+    <tr><td>Liquidity Stress Context</td><td>Credit spread or stress proxy if available on FRED</td><td>Narrative context and stress flag</td></tr>
+  </table>
+
+  <h3>6.3 V1 Classification Rule</h3>
+  <ul>
+    <li>Growth direction is based on whether the selected growth composite is improving or deteriorating versus a trailing baseline.</li>
+    <li>Inflation direction is based on whether inflation is accelerating or decelerating versus a trailing baseline.</li>
+    <li>The regime is assigned from the sign combination of those two directions.</li>
+    <li>Confidence can be reduced when the growth and inflation signals are weak or conflicting.</li>
+  </ul>
+
+  <h3>6.4 Regime-to-Asset Mapping</h3>
+  <p>V1 should maintain a qualitative mapping table of which sleeves tend to benefit or struggle in each regime. This table is explanatory, not a hard allocation engine.</p>
+
+  <h2>7. Portfolio Lab Methodology</h2>
+  <h3>7.1 Portfolio Architecture</h3>
+  <ul>
+    <li><strong>Strategic core:</strong> diversified long-run exposures across equities, duration, inflation protection, real assets, and diversifiers.</li>
+    <li><strong>Tactical overlay:</strong> tilts based on the screener composite and risk context.</li>
+    <li><strong>Risk target:</strong> annualized realized volatility aligned to <code>SPY</code>.</li>
+  </ul>
+
+  <h3>7.2 Initial Optimization Modes</h3>
+  <table>
+    <tr>
+      <th>Mode</th>
+      <th>Primary Objective</th>
+      <th>Notes</th>
+    </tr>
+    <tr><td>Mean-Variance</td><td>Maximize expected return per unit of variance</td><td>Must be constrained and presented as one lens, not the truth</td></tr>
+    <tr><td>Target Volatility</td><td>Scale portfolio toward <code>SPY</code> volatility</td><td>Default practical mode</td></tr>
+    <tr><td>Target Risk Contribution</td><td>Balance risk across sleeves</td><td>Useful diversification lens</td></tr>
+    <tr><td>Stress-Aware Score</td><td>Prefer portfolios with better downturn resilience</td><td>Use as ranking overlay, not a separate classical optimizer</td></tr>
+  </table>
+
+  <h3>7.3 Stress-Aware Score Components</h3>
+  <ul>
+    <li>Maximum drawdown</li>
+    <li>Downside deviation</li>
+    <li>Sortino ratio</li>
+    <li>Crisis-period return differentials</li>
+    <li>Correlation behavior in selloffs</li>
+    <li>Inflation-shock and growth-shock period behavior</li>
+  </ul>
+
+  <h3>7.4 Leverage Methodology</h3>
+  <ul>
+    <li>Compute base diversified portfolio realized volatility.</li>
+    <li>Compute trailing realized volatility of <code>SPY</code>.</li>
+    <li>Scale the portfolio toward <code>SPY</code> vol using a capped leverage multiplier.</li>
+    <li>Apply a user-visible financing-cost assumption.</li>
+    <li>Show both gross and net-of-financing results where possible.</li>
+  </ul>
+
+  <h3>7.5 Rebalancing Methodology</h3>
+  <ul>
+    <li>Default trigger: weight drift beyond threshold.</li>
+    <li>Optional trigger: realized volatility departure beyond threshold.</li>
+    <li>Calendar reporting can exist, but calendar rebalancing is not the house default.</li>
+  </ul>
+
+  <h3>7.6 Concentration Policy</h3>
+  <p>Use soft concentration controls. V1 should include warning thresholds but not hard stop constraints. Suggested starting thresholds:</p>
+  <ul>
+    <li>single sleeve warning above 25 percent,</li>
+    <li>equity aggregate warning above 65 percent,</li>
+    <li>any one non-equity diversifier warning above 20 percent.</li>
+  </ul>
+
+  <h2>8. Benchmark Methodology</h2>
+  <h3>8.1 SPY</h3>
+  <p><code>SPY</code> is the permanent public-market anchor benchmark and volatility target reference.</p>
+
+  <h3>8.2 Market Beating Portfolio</h3>
+  <p>This is the internally constructed house benchmark generated by the Portfolio Lab methodology.</p>
+
+  <h3>8.3 Vanguard Target Retirement</h3>
+  <ol>
+    <li>Attempt automated history/NAV retrieval.</li>
+    <li>If successful, include directly as a benchmark series.</li>
+    <li>If not successful, mark benchmark status as degraded.</li>
+    <li>Prompt user for latest close/NAV input.</li>
+    <li>Use partial comparison where history is missing, and state that clearly.</li>
+  </ol>
+
+  <h2>9. Portfolio Upload Schema</h2>
+  <h3>9.1 Required V1 Columns</h3>
+  <table>
+    <tr>
+      <th>Column</th>
+      <th>Required</th>
+      <th>Description</th>
+    </tr>
+    <tr><td><code>ticker</code></td><td>Yes</td><td>Instrument symbol</td></tr>
+    <tr><td><code>weight</code></td><td>Yes</td><td>Portfolio weight as decimal or percent</td></tr>
+  </table>
+
+  <h3>9.2 Optional Future Columns</h3>
+  <ul>
+    <li><code>shares</code></li>
+    <li><code>cost_basis</code></li>
+    <li><code>account</code></li>
+    <li><code>asset_class</code></li>
+  </ul>
+
+  <h3>9.3 Validation Rules</h3>
+  <ul>
+    <li>Normalize weights if the file appears to use percentages.</li>
+    <li>Reject blank ticker rows.</li>
+    <li>Flag duplicate tickers for consolidation or review.</li>
+    <li>Warn if total weight differs materially from 100 percent.</li>
+    <li>Flag unsupported tickers and continue with partial analysis where feasible.</li>
+  </ul>
+
+  <h2>10. Exposure Inference Methodology</h2>
+  <p>For uploaded portfolios, v1 should use a practical mapping-first approach:</p>
+  <ul>
+    <li>If the holding is in the known ETF universe, use direct sleeve classification.</li>
+    <li>If the holding is an ETF outside the house universe, classify using available fund metadata and broad proxy mapping where possible.</li>
+    <li>If the holding is an individual stock or unsupported instrument, classify as unresolved or broad equity fallback if that is the best honest approximation.</li>
+    <li>Display unresolved exposures explicitly rather than burying them.</li>
+  </ul>
+
+  <h2>11. Factor Attribution Methodology</h2>
+  <p>V1 should support regression-based factor attribution at a practical level. The first pass does not need a fully custom research library.</p>
+  <ul>
+    <li>Use available factor proxies or factor datasets where feasible.</li>
+    <li>Support at least market, size, value, and momentum attribution in some form.</li>
+    <li>Treat factor attribution as an explanatory layer rather than a trading engine.</li>
+  </ul>
+
+  <h2>12. AQR Expected Return Context</h2>
+  <p>AQR capital market expectations should be displayed as contextual reference only. V1 methodology rules:</p>
+  <ul>
+    <li>do not use AQR expectations directly in optimizer objective functions,</li>
+    <li>do not use them as a direct tactical timing signal,</li>
+    <li>use them to frame whether the house portfolio’s exposures align with or diverge from the medium-term outlook.</li>
+  </ul>
+
+  <h2>13. Missing Data Rules</h2>
+  <ul>
+    <li>If a ticker cannot be fetched, show it as unavailable and exclude it from calculations that require a full series.</li>
+    <li>If a signal cannot be built credibly, mark it unavailable rather than substitute noise.</li>
+    <li>If a benchmark is partially available, clearly distinguish between full-history and current-point-only comparisons.</li>
+    <li>Every degraded-data state should be visible in the UI.</li>
+  </ul>
+
+  <h2>14. What Is Frozen vs Flexible</h2>
+  <h3>14.1 Frozen For V1</h3>
+  <ul>
+    <li>module structure,</li>
+    <li>approved provider policy,</li>
+    <li>starter ETF universe, subject only to the managed-futures exception noted above,</li>
+    <li>three-block screener design,</li>
+    <li>four-quadrant macro framework,</li>
+    <li><code>SPY</code>-anchored risk target,</li>
+    <li>stress-aware portfolio evaluation.</li>
+  </ul>
+
+  <h3>14.2 Flexible After V1</h3>
+  <ul>
+    <li>exact factor data source,</li>
+    <li>additional sleeves and proxies,</li>
+    <li>signal weighting refinements,</li>
+    <li>regime-threshold refinements,</li>
+    <li>more advanced carry and valuation models.</li>
+  </ul>
+
+  <p class="footer">Prepared on 2026-03-26 for <strong>codex_terminal</strong>. This methodology spec is the implementation bridge between the v1 product spec and the coding phase.</p>
+</body>
+</html>

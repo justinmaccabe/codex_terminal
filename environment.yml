@@ -1,0 +1,10 @@
+name: codex_terminal
+channels:
+  - snowflake
+dependencies:
+  - python=3.10
+  - streamlit=1.46.1
+  - pandas
+  - numpy
+  - requests
+

@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>codex_terminal V1 Product Spec</title>
+  <style>
+    :root {
+      --ink: #112734;
+      --muted: #526a79;
+      --accent: #0b647f;
+      --accent-soft: #eef6fa;
+      --line: #d4e0e8;
+      --paper: #f7fafc;
+    }
+    body {
+      font-family: "Avenir Next", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--ink);
+      margin: 40px auto;
+      max-width: 900px;
+      line-height: 1.5;
+      background: #fff;
+      padding: 0 28px 44px;
+    }
+    .hero {
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, #f8fbfd 0%, #edf5f9 100%);
+      padding: 28px 30px;
+      margin-bottom: 24px;
+    }
+    .eyebrow {
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--accent);
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      color: #0c2431;
+    }
+    .subtitle {
+      margin: 0;
+      color: var(--muted);
+      font-size: 17px;
+    }
+    h2 {
+      margin: 28px 0 10px;
+      font-size: 21px;
+      border-bottom: 1px solid var(--line);
+      padding-bottom: 6px;
+      color: #12384a;
+    }
+    h3 {
+      margin: 18px 0 8px;
+      font-size: 16px;
+      color: #184b63;
+    }
+    p { margin: 10px 0; }
+    ul, ol { margin: 8px 0 14px 22px; }
+    li { margin: 5px 0; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0 18px;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      vertical-align: top;
+    }
+    th {
+      background: var(--paper);
+      text-align: left;
+      color: #16394c;
+    }
+    .callout {
+      background: var(--accent-soft);
+      border-left: 4px solid var(--accent);
+      padding: 12px 14px;
+      margin: 14px 0;
+    }
+    .small { font-size: 13px; color: var(--muted); }
+    code {
+      font-family: Menlo, Consolas, monospace;
+      background: #f2f6f8;
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .footer {
+      margin-top: 32px;
+      padding-top: 12px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <p class="eyebrow">V1 Product Specification</p>
+    <h1>codex_terminal</h1>
+    <p class="subtitle">Implementation-facing specification for the first working version of the cross-asset research and portfolio terminal.</p>
+  </div>
+
+  <h2>1. Purpose Of This Document</h2>
+  <p>This document translates the approved project scope into a buildable v1 specification. It defines what <strong>must</strong> be in the first version, what can be simplified, what is explicitly out of scope, and what design rules should govern implementation.</p>
+
+  <h2>2. V1 Goal</h2>
+  <p>Build a Streamlit application that lets the user:</p>
+  <ul>
+    <li>monitor cross-asset market leadership and deterioration,</li>
+    <li>evaluate broad and sub-bucket asset-class signals,</li>
+    <li>design and test a house “Market Beating Portfolio,”</li>
+    <li>compare any uploaded portfolio against <code>SPY</code>, a Vanguard target retirement benchmark, and the house portfolio,</li>
+    <li>interpret all of the above through a rules-based macro regime framework.</li>
+  </ul>
+
+  <h2>3. V1 Success Criteria</h2>
+  <ul>
+    <li>The app produces a credible cross-asset daily screener using free public data.</li>
+    <li>The app can backtest and optimize ETF-based portfolios with benchmark-relative outputs.</li>
+    <li>The app can explain differences between an uploaded portfolio and the benchmark stack.</li>
+    <li>The app can summarize the current macro regime using FRED-backed rules.</li>
+    <li>The app remains opinionated and institutionally framed rather than endlessly customizable.</li>
+  </ul>
+
+  <h2>4. Required Pages / Modules</h2>
+  <table>
+    <tr>
+      <th>Page</th>
+      <th>Required In V1</th>
+      <th>Main User Question</th>
+    </tr>
+    <tr>
+      <td><strong>Terminal</strong></td>
+      <td>Yes</td>
+      <td>What matters in markets right now?</td>
+    </tr>
+    <tr>
+      <td><strong>Screener</strong></td>
+      <td>Yes</td>
+      <td>What asset sleeves are strong, weak, expensive, attractive, or regime-favored?</td>
+    </tr>
+    <tr>
+      <td><strong>Portfolio Lab</strong></td>
+      <td>Yes</td>
+      <td>How should the Market Beating Portfolio be constructed and tested?</td>
+    </tr>
+    <tr>
+      <td><strong>Compare</strong></td>
+      <td>Yes</td>
+      <td>How does this input portfolio differ from the benchmarks?</td>
+    </tr>
+    <tr>
+      <td><strong>Macro</strong></td>
+      <td>Yes</td>
+      <td>Which macro regime is in force and what should that imply?</td>
+    </tr>
+    <tr>
+      <td><strong>Learn</strong></td>
+      <td>Yes, light version</td>
+      <td>What am I missing about today’s market and portfolio tradeoffs?</td>
+    </tr>
+  </table>
+
+  <h2>5. Data Sources</h2>
+  <h3>5.1 Mandatory Sources</h3>
+  <ul>
+    <li><strong>Yahoo Finance / yfinance</strong> for ETF market data and benchmark history where available.</li>
+    <li><strong>FRED</strong> for macro regime inputs.</li>
+  </ul>
+
+  <h3>5.2 Conditional Sources</h3>
+  <ul>
+    <li>AQR capital market expectation source for display-only reference data.</li>
+    <li>Vanguard target retirement data source if free, stable access is feasible.</li>
+  </ul>
+
+  <h3>5.3 Data Rules</h3>
+  <ul>
+    <li>Free public data only in v1.</li>
+    <li>No paid feed dependencies.</li>
+    <li>No source sprawl. Any new source beyond the above requires approval.</li>
+    <li>Daily data is sufficient for the screener and terminal in v1.</li>
+    <li>Monthly resampling is acceptable for some long-horizon analytics and factor regressions where appropriate.</li>
+  </ul>
+
+  <h2>6. Approved ETF Provider Universe</h2>
+  <ul>
+    <li>Vanguard</li>
+    <li>iShares</li>
+    <li>SPDR</li>
+    <li>Invesco</li>
+    <li>Schwab</li>
+    <li>Avantis</li>
+    <li>Alpha Architect</li>
+    <li>JPMorgan</li>
+    <li>AQR</li>
+    <li>WisdomTree</li>
+    <li>PIMCO</li>
+  </ul>
+
+  <h2>7. Initial V1 Asset Coverage</h2>
+  <p>V1 should cover a practical starter universe rather than every possible ETF. The starter universe should be broad enough to represent the core thesis.</p>
+
+  <h3>7.1 Coverage Buckets</h3>
+  <ul>
+    <li>US equity beta</li>
+    <li>US small cap</li>
+    <li>US value</li>
+    <li>US momentum proxy where credible</li>
+    <li>International developed equity</li>
+    <li>International value / small cap where feasible</li>
+    <li>Emerging markets</li>
+    <li>Short, intermediate, and long Treasuries</li>
+    <li>Inflation-linked bonds</li>
+    <li>Investment-grade or broad bond proxy</li>
+    <li>REITs</li>
+    <li>Broad commodities</li>
+    <li>Gold</li>
+    <li>Managed-futures proxy if implementation quality is acceptable</li>
+    <li>Cash or ultra-short Treasury proxy</li>
+  </ul>
+
+  <h3>7.2 Universe Freeze Requirement</h3>
+  <p>Before coding begins, the first build should lock a named list of tickers for each sleeve. That separate instrument list is a dependency of implementation and should be treated as a companion spec.</p>
+
+  <h2>8. Benchmark Stack</h2>
+  <h3>8.1 Always-On Benchmarks</h3>
+  <ul>
+    <li><code>SPY</code></li>
+    <li>Market Beating Portfolio</li>
+    <li>Vanguard target retirement benchmark, if available</li>
+  </ul>
+
+  <h3>8.2 Vanguard Benchmark Fallback Logic</h3>
+  <ol>
+    <li>Attempt automated fetch of actual NAV/history.</li>
+    <li>If unavailable, show benchmark status as degraded.</li>
+    <li>Prompt user for the latest close or NAV manually.</li>
+    <li>Use the manually entered figure for current benchmark display and note limitations.</li>
+  </ol>
+
+  <h2>9. Terminal Page Specification</h2>
+  <h3>9.1 Purpose</h3>
+  <p>Provide a dense but interpretable snapshot of the market environment.</p>
+
+  <h3>9.2 Required Components</h3>
+  <ul>
+    <li>Current macro regime badge</li>
+    <li>Top-performing and worst-performing major sleeves over selectable horizons</li>
+    <li>Market breadth or participation summary if feasible from the chosen universe</li>
+    <li>Factor leadership snapshot</li>
+    <li>Market Beating Portfolio current summary</li>
+    <li>Short commentary box: “What changed / What matters / What to watch”</li>
+  </ul>
+
+  <h3>9.3 Time Horizons</h3>
+  <p>Minimum required selectable lookbacks: 1 month, 3 months, 6 months, 12 months, and year-to-date.</p>
+
+  <h2>10. Screener Specification</h2>
+  <h3>10.1 Required Scope</h3>
+  <p>The screener must work at two levels:</p>
+  <ul>
+    <li>Broad asset-class level</li>
+    <li>Sub-bucket or sleeve level</li>
+  </ul>
+
+  <h3>10.2 Required Signal Columns</h3>
+  <ul>
+    <li>Absolute momentum</li>
+    <li>Relative momentum</li>
+    <li>Trend</li>
+    <li>Volatility-adjusted strength</li>
+    <li>Value proxy or valuation context where feasible</li>
+    <li>Carry proxy where feasible</li>
+    <li>Macro regime fit</li>
+    <li>Composite score</li>
+    <li>Prescriptive stance</li>
+  </ul>
+
+  <h3>10.3 V1 Signal Methodology Rules</h3>
+  <ul>
+    <li>Use simple, explainable formulas first.</li>
+    <li>Avoid fragile or overly parameterized signal engineering in v1.</li>
+    <li>If a signal cannot be built credibly for a sleeve, mark it unavailable rather than fabricate precision.</li>
+    <li>The composite should remain interpretable by exposing underlying sleeve contributions.</li>
+  </ul>
+
+  <h3>10.4 Composite Design</h3>
+  <p>V1 composite should follow a structured blend:</p>
+  <ul>
+    <li><strong>Tactical block</strong>: trend, absolute momentum, relative momentum, volatility-adjusted strength</li>
+    <li><strong>Structural block</strong>: value, carry, medium-term expected return context</li>
+    <li><strong>Macro block</strong>: regime fit used as context or mild influence</li>
+  </ul>
+  <p>Implementation note: expose block-level sub-scores as well as a final score.</p>
+
+  <h3>10.5 Prescriptive Mapping</h3>
+  <p>The screener should map final score bands to:</p>
+  <ul>
+    <li>Overweight</li>
+    <li>Neutral</li>
+    <li>Underweight</li>
+    <li>Avoid</li>
+    <li>Watchlist</li>
+  </ul>
+  <p>These mappings should be configurable internally in code but not presented as a heavy user customization feature.</p>
+
+  <h2>11. Macro Module Specification</h2>
+  <h3>11.1 Framework</h3>
+  <p>Use a four-quadrant rules-based regime model:</p>
+  <ul>
+    <li>Growth up / inflation up</li>
+    <li>Growth up / inflation down</li>
+    <li>Growth down / inflation up</li>
+    <li>Growth down / inflation down</li>
+  </ul>
+
+  <h3>11.2 V1 Output Requirements</h3>
+  <ul>
+    <li>Current regime classification</li>
+    <li>Regime trend or transition signal if detectable</li>
+    <li>Underlying macro inputs used in classification</li>
+    <li>Short explanation of what assets and factors tend to work or fail in this regime</li>
+  </ul>
+
+  <h3>11.3 Regime Use Across App</h3>
+  <ul>
+    <li>Display on Terminal page</li>
+    <li>Use in Screener as context or mild scoring influence</li>
+    <li>Use in Compare commentary</li>
+    <li>Use in Learn page explanations</li>
+  </ul>
+
+  <h2>12. Portfolio Lab Specification</h2>
+  <h3>12.1 Core Purpose</h3>
+  <p>Construct and test the Market Beating Portfolio as a strategic core plus tactical overlay that targets <code>SPY</code> realized volatility and seeks superior long-term risk-adjusted outcomes.</p>
+
+  <h3>12.2 Required Portfolio Construction Modes</h3>
+  <ul>
+    <li>Manual-weight portfolio builder</li>
+    <li>Target-volatility portfolio builder</li>
+    <li>Target-risk-contribution portfolio builder</li>
+    <li>Mean-variance optimizer</li>
+  </ul>
+
+  <h3>12.3 Required Output Panels</h3>
+  <ul>
+    <li>Weights table</li>
+    <li>Risk contribution table</li>
+    <li>Performance statistics table</li>
+    <li>Rolling return charts</li>
+    <li>Drawdown chart</li>
+    <li>Correlation matrix or correlation diagnostics</li>
+    <li>Benchmark-relative comparison vs <code>SPY</code></li>
+    <li>Stress period performance table</li>
+    <li>Leverage and financing-drag summary</li>
+  </ul>
+
+  <h3>12.4 Rebalancing Rule</h3>
+  <p>Default to volatility-triggered or weight-drift-triggered rebalancing. Calendar-only rebalancing should not be the default frame in v1.</p>
+
+  <h3>12.5 Tail-Risk Logic</h3>
+  <p>V1 optimization should be stress-aware. Candidate portfolios should be evaluated not only by return and volatility, but also by:</p>
+  <ul>
+    <li>maximum drawdown,</li>
+    <li>downside deviation,</li>
+    <li>crisis-period relative resilience,</li>
+    <li>correlation breakdown in stress,</li>
+    <li>behavior in inflation and growth shock periods.</li>
+  </ul>
+
+  <h3>12.6 Leverage Rule</h3>
+  <p>Default leverage implementation should be volatility targeting to <code>SPY</code> realized volatility with a visible financing assumption. No brokerage-specific margin engine is required in v1.</p>
+
+  <h3>12.7 Concentration Rule</h3>
+  <p>Soft limits only. If a position exceeds a house hard-limit threshold, the UI should flag it prominently but not block the portfolio.</p>
+
+  <h2>13. Comparison Module Specification</h2>
+  <h3>13.1 Input</h3>
+  <p>At minimum, the app should accept an uploaded portfolio file containing ticker and weight columns. Shares or notional can be supported later if cleanly derivable.</p>
+
+  <h3>13.2 Required Validation</h3>
+  <ul>
+    <li>Check for duplicate tickers</li>
+    <li>Check for missing weights</li>
+    <li>Check for weights summing materially above or below 100 percent</li>
+    <li>Flag unknown or unsupported tickers</li>
+  </ul>
+
+  <h3>13.3 Required Analysis</h3>
+  <ul>
+    <li>Performance vs <code>SPY</code>, Vanguard benchmark, and Market Beating Portfolio</li>
+    <li>Risk vs those same benchmarks</li>
+    <li>Asset-class exposure differences</li>
+    <li>Factor exposure differences</li>
+    <li>Qualitative summary of what risks the uploaded portfolio is more and less exposed to</li>
+    <li>Current-regime commentary on how those differences matter now</li>
+  </ul>
+
+  <h3>13.4 Exposure Inference Rule</h3>
+  <p>V1 should infer exposures from holdings as far as possible using available ticker-level mappings and proxy logic. If a holding cannot be reliably classified, the app should surface that uncertainty rather than hide it.</p>
+
+  <h2>14. Learn Module Specification</h2>
+  <p>This should remain lightweight in v1. It is not a textbook module.</p>
+  <ul>
+    <li>Explain key terms behind today’s outputs</li>
+    <li>Highlight what the user may not know about current market conditions</li>
+    <li>Connect regime, factors, and benchmark behavior to concise academic framing</li>
+    <li>Keep commentary practical and short</li>
+  </ul>
+
+  <h2>15. Required Analytics</h2>
+  <ul>
+    <li>CAGR</li>
+    <li>Annualized volatility</li>
+    <li>Sharpe ratio</li>
+    <li>Sortino ratio</li>
+    <li>Maximum drawdown</li>
+    <li>Rolling returns</li>
+    <li>Correlation diagnostics</li>
+    <li>Factor regression / factor attribution</li>
+    <li>Efficient frontier or equivalent optimizer chart</li>
+    <li>Rebalancing analysis</li>
+    <li>Regime-based performance slicing</li>
+  </ul>
+
+  <h2>16. Performance And Resource Constraints</h2>
+  <ul>
+    <li>Do not optimize for instant response if it compromises analysis quality.</li>
+    <li>Backtests taking up to about a minute are acceptable.</li>
+    <li>Memory use should be disciplined, but broad free-data usage is acceptable.</li>
+    <li>Prefer caching and reusable intermediate data rather than excessive repeated API pulls.</li>
+  </ul>
+
+  <h2>17. UX Requirements</h2>
+  <ul>
+    <li>High-density layout is acceptable.</li>
+    <li>Separate pages or modules are preferred over one overloaded dashboard.</li>
+    <li>Outputs should feel institutional rather than retail.</li>
+    <li>Explanations should be direct and useful, not verbose.</li>
+    <li>The app should remain opinionated for the house framework.</li>
+  </ul>
+
+  <h2>18. Strict V1 Non-Goals</h2>
+  <ul>
+    <li>No broker integration</li>
+    <li>No trade execution</li>
+    <li>No single-stock research module</li>
+    <li>No tax analysis</li>
+    <li>No WSJ or Bloomberg news ingestion in v1</li>
+    <li>No embedded LLM assistant in v1</li>
+    <li>No attempt at full Bloomberg-terminal command behavior</li>
+  </ul>
+
+  <h2>19. Open Dependencies Before Coding</h2>
+  <ol>
+    <li>Freeze the initial ETF ticker universe for each sleeve.</li>
+    <li>Define exact signal formulas and lookbacks for the screener.</li>
+    <li>Define exact macro inputs and regime-threshold rules.</li>
+    <li>Define benchmark file or fetch logic for Vanguard target retirement.</li>
+    <li>Define the upload schema for the Compare module.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Implementation posture:</strong> coding should not begin until the v1 universe and signal formulas are frozen. The app is conceptually clear now, but those two pieces determine whether the first build is coherent or noisy.
+  </div>
+
+  <h2>20. Recommended Build Order</h2>
+  <ol>
+    <li>Data layer and cached fetch infrastructure</li>
+    <li>Universe definition and benchmark plumbing</li>
+    <li>Macro regime engine</li>
+    <li>Screener engine</li>
+    <li>Portfolio Lab engine</li>
+    <li>Comparison engine</li>
+    <li>Terminal summary layer</li>
+    <li>Learn-page interpretation layer</li>
+  </ol>
+
+  <h2>21. Immediate Next Document</h2>
+  <p>The next useful document is not another high-level brief. It is a <strong>methodology spec</strong> covering:</p>
+  <ul>
+    <li>the exact ETF list,</li>
+    <li>the exact signal formulas,</li>
+    <li>the exact macro rule set,</li>
+    <li>the exact benchmark and upload schemas.</li>
+  </ul>
+
+  <p class="footer">Prepared on 2026-03-26 for <strong>codex_terminal</strong> before implementation. This document defines the first build target and should be treated as the governing v1 specification.</p>
+</body>
+</html>
