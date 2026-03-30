@@ -289,7 +289,15 @@ def _load_market_context() -> Dict[str, object]:
     macro_snapshot = macro_snapshots(fred_bundle)
     screener = compute_screener_scores(prices, regime=regime.regime)
     spy_returns = returns.get("SPY", pd.Series(dtype=float))
-    house_model = build_market_beating_portfolio(returns, screener, spy_returns, mode=mode, financing_rate=financing_rate)
+    house_model = build_market_beating_portfolio(
+        returns,
+        prices,
+        fred_bundle,
+        screener,
+        spy_returns,
+        mode=mode,
+        financing_rate=financing_rate,
+    )
     return {
         "prices": prices,
         "returns": returns,
@@ -481,16 +489,18 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             st.dataframe(
                 house_model.expected_return_table.style.format(
                     {
-                        "Value Lens": _format_float,
-                        "Carry Lens": _format_float,
-                        "Diversification Lens": _format_float,
-                        "Momentum Lens": _format_float,
+                        "Structural Base": _format_pct,
+                        "Market Adjustment": _format_pct,
+                        "Factor Adjustment": _format_pct,
+                        "Crisis Adjustment": _format_pct,
+                        "Expected Return": _format_pct,
+                        "Confidence": _format_float,
                         "Expected Return Score": _format_float,
                     }
                 ),
                 use_container_width=True,
             )
-            st.caption("This is a heuristic expected-return stack, not a full capital-markets model. It combines value, carry, diversification, and trend context to show which sleeves are most likely to improve the benchmark engine.")
+            st.caption("This expected-return engine is formula-based rather than purely heuristic. It combines a structural baseline with market, factor, and crisis adjustments derived from sleeve definitions plus live FRED context.")
 
     with research_tabs[2]:
         if house_model.crisis_alpha_table.empty:

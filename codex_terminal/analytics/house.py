@@ -6,6 +6,7 @@ from typing import Dict, List
 import numpy as np
 import pandas as pd
 
+from codex_terminal.analytics.expected_returns import build_expected_return_table
 from codex_terminal.analytics.metrics import summary_stats
 from codex_terminal.analytics.portfolio import (
     compute_stress_table,
@@ -417,6 +418,7 @@ def _resolve_selected_mode(
     asset_returns: pd.DataFrame,
     screener: pd.DataFrame,
     spy_returns: pd.Series,
+    expected_return_table: pd.DataFrame,
     mode: str,
     financing_rate: float,
 ) -> str:
@@ -464,11 +466,12 @@ def _build_mode_holdings(
     asset_returns: pd.DataFrame,
     screener: pd.DataFrame,
     spy_returns: pd.Series,
+    expected_return_table: pd.DataFrame,
     mode: str,
 ) -> pd.DataFrame:
     base = _score_tilt_rows(screener)
     crisis_alpha = _crisis_alpha_scores(asset_returns, spy_returns)
-    expected_scores = _expected_return_scores(asset_returns).set_index("Ticker")["Expected Return Score"]
+    expected_scores = expected_return_table.set_index("Ticker")["Expected Return Score"] if not expected_return_table.empty else pd.Series(dtype=float)
     base["crisis_alpha_score"] = base["ticker"].map(crisis_alpha).fillna(0.0)
     base["expected_return_score"] = base["ticker"].map(expected_scores).fillna(0.0)
     base["bounded_weight"] = base["bounded_weight"] * (
@@ -500,8 +503,8 @@ def _build_mode_holdings(
         return _optimize_around_anchor(asset_returns, _normalize_holdings(merged), seed=33, trials=1600, max_shift=0.025)
 
     # Blend
-    tactical = _build_mode_holdings(asset_returns, screener, spy_returns, "Strategic + Tactical")
-    max_sharpe = _build_mode_holdings(asset_returns, screener, spy_returns, "Max Sharpe")
+    tactical = _build_mode_holdings(asset_returns, screener, spy_returns, expected_return_table, "Strategic + Tactical")
+    max_sharpe = _build_mode_holdings(asset_returns, screener, spy_returns, expected_return_table, "Max Sharpe")
     merged = tactical.merge(max_sharpe[["ticker", "weight"]], on="ticker", suffixes=("", "_ms"))
     merged["weight"] = 0.65 * merged["weight"] + 0.35 * merged["weight_ms"]
     merged = merged.drop(columns=["weight_ms"])
@@ -530,13 +533,30 @@ def _diagnostics(holdings: pd.DataFrame, stats: Dict[str, float], spy_stats: Dic
 
 def build_market_beating_portfolio(
     asset_returns: pd.DataFrame,
+    prices: pd.DataFrame,
+    fred_bundle: Dict[str, pd.Series],
     screener: pd.DataFrame,
     spy_returns: pd.Series,
     mode: str = "Strategic + Tactical",
     financing_rate: float = 0.04,
 ) -> HousePortfolioModel:
-    selected_mode = _resolve_selected_mode(asset_returns, screener, spy_returns, mode, financing_rate)
-    holdings = _build_mode_holdings(asset_returns, screener, spy_returns, selected_mode)
+    expected_return_engine = build_expected_return_table(prices, fred_bundle)
+    expected_return_table = expected_return_engine.rename(
+        columns={
+            "ticker": "Ticker",
+            "proxy": "Proxy",
+            "structural_base": "Structural Base",
+            "market_adjustment": "Market Adjustment",
+            "factor_adjustment": "Factor Adjustment",
+            "crisis_adjustment": "Crisis Adjustment",
+            "expected_return": "Expected Return",
+            "confidence": "Confidence",
+            "rationale": "Rationale",
+            "expected_return_score": "Expected Return Score",
+        }
+    )
+    selected_mode = _resolve_selected_mode(asset_returns, screener, spy_returns, expected_return_table, mode, financing_rate)
+    holdings = _build_mode_holdings(asset_returns, screener, spy_returns, expected_return_table, selected_mode)
 
     series = portfolio_returns(holdings[["ticker", "weight"]], asset_returns)
     stats = summary_stats(series) if not series.empty else {}
@@ -550,7 +570,6 @@ def build_market_beating_portfolio(
     stress_table = compute_stress_table(series, spy_returns) if not series.empty else pd.DataFrame()
     diagnostics = _diagnostics(holdings, net_target_vol_stats or target_vol_stats or stats, spy_stats)
     research_table = _build_research_table(holdings)
-    expected_return_table = _expected_return_scores(asset_returns)
     crisis_alpha_table = _crisis_alpha_table(asset_returns, spy_returns)
     change_log_table = _build_change_log_table(holdings, expected_return_table, crisis_alpha_table)
     subperiod_table = _build_subperiod_table(net_target_vol_series if not net_target_vol_series.empty else target_vol_series, spy_returns)
