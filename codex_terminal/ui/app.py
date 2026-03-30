@@ -32,6 +32,7 @@ from codex_terminal.config.universe import (
     tickers,
     universe_by_ticker,
 )
+from codex_terminal.data.funds import fetch_fund_profiles
 from codex_terminal.data.fred import DEFAULT_FRED_SERIES, fetch_fred_bundle, infer_fred_status
 from codex_terminal.data.market_data import compute_returns, fetch_price_history, infer_status, latest_available
 from codex_terminal.data.vanguard import fetch_vanguard_benchmark_history, infer_vanguard_target_fund
@@ -39,7 +40,8 @@ from codex_terminal.portfolio.benchmarks import degraded_vanguard_state
 from codex_terminal.portfolio.compare import compare_stats, normalize_portfolio_frame, portfolio_returns
 
 
-PAGES = ["Welcome", "Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Macro", "Learn"]
+PAGES = ["Welcome", "Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Morningstar", "Macro", "Learn"]
+DEFAULT_FUND_TICKERS = ["VTSAX", "VFIAX", "VWELX", "FBALX"]
 
 
 def _format_pct(value: float) -> str:
@@ -52,6 +54,12 @@ def _format_float(value: float) -> str:
     if pd.isna(value):
         return "N/A"
     return f"{value:.2f}"
+
+
+def _format_billions(value: float) -> str:
+    if pd.isna(value):
+        return "N/A"
+    return f"${value / 1_000_000_000:.1f}B"
 
 
 def _inject_terminal_theme() -> None:
@@ -323,7 +331,8 @@ def _render_sidebar() -> str:
         st.write("1. Morning Brief")
         st.write("2. Terminal")
         st.write("3. Compare")
-        st.write("4. Portfolio Lab")
+        st.write("4. Morningstar")
+        st.write("5. Portfolio Lab")
         if st.button("Show Welcome Again", use_container_width=True):
             st.session_state["onboarding_seen"] = False
             st.session_state["pending_nav_page"] = "Welcome"
@@ -590,8 +599,8 @@ def _render_welcome(context: Dict[str, object]) -> None:
         [
             ("Best First Tab", "Morning Brief", "start here"),
             ("Daily Use", "Terminal", "market dashboard"),
+            ("Fund Research", "Morningstar", "mutual fund work"),
             ("Portfolio Work", "Compare", "upload a portfolio"),
-            ("Research Depth", "Portfolio Lab", "test constructions"),
         ]
     )
 
@@ -627,8 +636,9 @@ def _render_welcome(context: Dict[str, object]) -> None:
         _render_section_title("How To Use It")
         st.write("1. Start on `Morning Brief` to understand what changed in markets.")
         st.write("2. Use `Terminal` for the broader dashboard view.")
-        st.write("3. Use `Compare` if you want to evaluate a real portfolio.")
-        st.write("4. Use `Portfolio Lab` if you want to test or build allocations.")
+        st.write("3. Use `Morningstar` if you want to research mutual funds, compare them, or build a fund portfolio.")
+        st.write("4. Use `Compare` if you want to evaluate a real portfolio.")
+        st.write("5. Use `Portfolio Lab` if you want to test or build allocations.")
 
     with intro_cols[1]:
         _render_section_title("Who This Is Built For")
@@ -668,6 +678,7 @@ def _render_welcome(context: Dict[str, object]) -> None:
             {"Tab": "Screener", "Purpose": "Ranks sleeves by trend, momentum, structural context, and macro fit."},
             {"Tab": "Portfolio Lab", "Purpose": "Build and test portfolio ideas and compare them to SPY and the house benchmark."},
             {"Tab": "Compare", "Purpose": "Upload a portfolio and compare it to key benchmarks and exposures."},
+            {"Tab": "Morningstar", "Purpose": "Research mutual funds, compare them side by side, and build a model fund portfolio."},
             {"Tab": "Macro", "Purpose": "Understand the current regime and how it tends to affect assets and factors."},
             {"Tab": "Learn", "Purpose": "Explain the framework, what may be failing, and what to pay attention to next."},
         ]
@@ -685,6 +696,279 @@ def _render_welcome(context: Dict[str, object]) -> None:
             st.session_state["onboarding_seen"] = True
             st.session_state["pending_nav_page"] = "Compare"
             st.rerun()
+
+
+def _parse_fund_tickers(raw_value: str) -> list[str]:
+    tokens = [token.strip().upper() for token in raw_value.replace("\n", ",").split(",")]
+    return [token for token in dict.fromkeys(tokens) if token]
+
+
+def _render_morningstar(context: Dict[str, object]) -> None:
+    st.subheader("Morningstar")
+    st.write("Mutual fund research, side-by-side comparison, and model fund portfolio building.")
+
+    with st.container():
+        st.markdown(
+            """
+            <div class="info-panel">
+                <div class="info-panel-title">How To Use This Page</div>
+                <div class="info-panel-copy">
+                    Start with a short list of mutual funds you actually want to compare. The app will pull live history,
+                    surface basic fund metadata, compare performance and diversification, and let you build a simple model
+                    portfolio against SPY and the Market Beating Portfolio.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    default_raw = ", ".join(st.session_state.get("morningstar_tickers", DEFAULT_FUND_TICKERS))
+    raw_tickers = st.text_input(
+        "Mutual fund tickers",
+        value=default_raw,
+        help="Enter Yahoo Finance mutual fund tickers, separated by commas.",
+    )
+    fund_tickers = _parse_fund_tickers(raw_tickers)
+    st.session_state["morningstar_tickers"] = fund_tickers
+    if not fund_tickers:
+        st.info("Enter at least one mutual fund ticker to begin.")
+        return
+
+    horizon = st.selectbox(
+        "History window",
+        ["3Y", "5Y", "10Y", "Max"],
+        index=1,
+        help="Used for mutual fund comparison and portfolio-building history.",
+    )
+    horizon_map = {
+        "3Y": "2023-01-01",
+        "5Y": "2021-01-01",
+        "10Y": "2016-01-01",
+        "Max": "2010-01-01",
+    }
+    benchmark_options = fund_tickers + ["SPY", "Market Beating Portfolio"]
+    selected_benchmark = st.selectbox("Comparison benchmark", benchmark_options, index=min(len(benchmark_options) - 1, benchmark_options.index("SPY") if "SPY" in benchmark_options else 0))
+
+    fund_prices = fetch_price_history(fund_tickers + ["SPY"], start=horizon_map[horizon])
+    fund_returns = compute_returns(fund_prices)
+    profiles = fetch_fund_profiles(fund_tickers)
+    available_funds = [ticker for ticker in fund_tickers if ticker in fund_returns.columns]
+    if not available_funds:
+        st.warning("No overlapping price history returned for the selected mutual funds.")
+        return
+
+    latest_prices = latest_available(fund_prices[available_funds]) if not fund_prices.empty else pd.Series(dtype=float)
+    loaded = len(available_funds)
+    _render_desk_grid(
+        [
+            ("Funds Loaded", str(loaded), f"of {len(fund_tickers)} requested"),
+            ("Primary Benchmark", selected_benchmark, "comparison base"),
+            ("History Window", horizon, f"since {horizon_map[horizon]}"),
+            ("House Mode", context["house_model"].mode, "current benchmark engine"),
+        ]
+    )
+
+    research_tabs = st.tabs(["Research", "Compare", "Builder"])
+
+    with research_tabs[0]:
+        _render_section_title("Fund Profiles")
+        if profiles.empty:
+            st.info("Fund metadata is unavailable right now.")
+        else:
+            display = profiles.copy()
+            if not latest_prices.empty:
+                display["latest_price"] = display["ticker"].map(latest_prices.to_dict())
+            summary_display = display[
+                [
+                    "ticker",
+                    "name",
+                    "category",
+                    "family",
+                    "expense_ratio",
+                    "yield_pct",
+                    "total_assets",
+                    "quote_type",
+                    "latest_price",
+                ]
+            ].rename(
+                columns={
+                    "ticker": "Ticker",
+                    "name": "Fund",
+                    "category": "Category",
+                    "family": "Family",
+                    "expense_ratio": "Expense Ratio",
+                    "yield_pct": "Yield",
+                    "total_assets": "Total Assets",
+                    "quote_type": "Quote Type",
+                    "latest_price": "Latest Price",
+                }
+            )
+            st.dataframe(
+                summary_display.style.format(
+                    {
+                        "Expense Ratio": _format_pct,
+                        "Yield": _format_pct,
+                        "Total Assets": _format_billions,
+                        "Latest Price": "{:.2f}",
+                    }
+                ),
+                use_container_width=True,
+            )
+
+            selected_profile = st.selectbox("Fund profile detail", available_funds, index=0, key="fund_profile_detail")
+            row = profiles.set_index("ticker").loc[selected_profile]
+            st.markdown(f"**{row['name']}**")
+            st.caption(f"{row['family']} | {row['category']} | {row['quote_type']}")
+            st.write(row["summary"])
+
+        _render_section_title("Historical Summary Stats")
+        stats_frame = pd.DataFrame({ticker: summary_stats(fund_returns[ticker].dropna()) for ticker in available_funds})
+        if "SPY" in fund_returns:
+            stats_frame["SPY"] = summary_stats(fund_returns["SPY"].dropna())
+        st.dataframe(_format_stats_frame(stats_frame), use_container_width=True)
+
+    with research_tabs[1]:
+        _render_section_title("Normalized Growth")
+        growth = (1 + fund_returns[available_funds + (["SPY"] if "SPY" in fund_returns else [])]).cumprod()
+        st.line_chart(growth)
+
+        _render_section_title("Return Comparison")
+        compare_table = pd.DataFrame(index=available_funds)
+        compare_table["1M"] = [fund_returns[ticker].tail(21).add(1).prod() - 1 for ticker in available_funds]
+        compare_table["3M"] = [fund_returns[ticker].tail(63).add(1).prod() - 1 for ticker in available_funds]
+        compare_table["1Y"] = [fund_returns[ticker].tail(252).add(1).prod() - 1 for ticker in available_funds]
+        compare_table["Sharpe"] = [summary_stats(fund_returns[ticker]).get("Sharpe") for ticker in available_funds]
+        compare_table["Max Drawdown"] = [summary_stats(fund_returns[ticker]).get("Max Drawdown") for ticker in available_funds]
+        st.dataframe(
+            compare_table.style.format(
+                {"1M": _format_pct, "3M": _format_pct, "1Y": _format_pct, "Sharpe": _format_float, "Max Drawdown": _format_pct}
+            ),
+            use_container_width=True,
+        )
+
+        corr = fund_returns[available_funds].corr() if len(available_funds) > 1 else pd.DataFrame()
+        compare_cols = st.columns([1.1, 0.9])
+        with compare_cols[0]:
+            _render_section_title("Correlation")
+            if corr.empty:
+                st.info("Add at least two funds to compare diversification.")
+            else:
+                st.dataframe(corr.style.format("{:.2f}"), use_container_width=True)
+        with compare_cols[1]:
+            benchmark_series = (
+                context["house_model"].target_vol_series
+                if selected_benchmark == "Market Beating Portfolio"
+                else fund_returns.get(selected_benchmark, pd.Series(dtype=float))
+            )
+            if selected_benchmark != "Market Beating Portfolio" and selected_benchmark not in fund_returns:
+                benchmark_series = pd.Series(dtype=float)
+            _render_section_title(f"Diagnostics vs {selected_benchmark}")
+            if benchmark_series.empty:
+                st.info("Not enough overlapping history for benchmark diagnostics.")
+            else:
+                diag_frames = []
+                for ticker in available_funds:
+                    diag = compare_stats(fund_returns[ticker], benchmark_series)
+                    if diag.empty:
+                        continue
+                    metric_map = dict(zip(diag["Metric"], diag["Value"]))
+                    metric_map["Ticker"] = ticker
+                    diag_frames.append(metric_map)
+                if diag_frames:
+                    diag_frame = pd.DataFrame(diag_frames).set_index("Ticker")
+                    st.dataframe(
+                        diag_frame.style.format(
+                            {
+                                "Correlation": "{:.2f}",
+                                "Beta": "{:.2f}",
+                                "Tracking Error": _format_pct,
+                                "Cumulative Return Spread": _format_pct,
+                            }
+                        ),
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("Not enough overlapping history for diagnostics.")
+
+    with research_tabs[2]:
+        _render_section_title("Model Mutual Fund Portfolio")
+        builder_default = available_funds[: min(4, len(available_funds))]
+        selected_builder = st.multiselect(
+            "Funds to include",
+            available_funds,
+            default=builder_default,
+            key="morningstar_builder_funds",
+        )
+        if not selected_builder:
+            st.info("Select at least one fund to build a model portfolio.")
+        else:
+            weighting_mode = st.selectbox(
+                "Portfolio construction",
+                ["Equal Weight", "Inverse Vol", "Custom Weights"],
+                key="morningstar_weight_mode",
+            )
+            if weighting_mode == "Equal Weight":
+                weights = equal_weight_portfolio(selected_builder)
+            elif weighting_mode == "Inverse Vol":
+                weights = inverse_vol_weights(fund_returns, selected_builder)
+            else:
+                custom = {}
+                cols = st.columns(min(3, len(selected_builder)) or 1)
+                default_weight = round(1 / len(selected_builder), 2)
+                for idx, ticker in enumerate(selected_builder):
+                    label = f"{ticker} weight"
+                    custom[ticker] = cols[idx % len(cols)].number_input(
+                        label,
+                        min_value=0.0,
+                        max_value=1.0,
+                        value=default_weight,
+                        step=0.01,
+                        key=f"morningstar_weight_{ticker}",
+                    )
+                weights = normalize_portfolio_frame(pd.DataFrame({"ticker": list(custom.keys()), "weight": list(custom.values())}))
+
+            portfolio_series = portfolio_returns(weights, fund_returns)
+            spy = fund_returns.get("SPY", pd.Series(dtype=float))
+            house_series, house_stats = _house_benchmark_series_and_stats(context)
+            house_slice = house_series.loc[portfolio_series.index.min(): portfolio_series.index.max()] if not portfolio_series.empty else pd.Series(dtype=float)
+
+            if portfolio_series.empty:
+                st.warning("No overlapping return history for the selected fund portfolio.")
+            else:
+                builder_stats = pd.DataFrame(
+                    {
+                        "Fund Portfolio": summary_stats(portfolio_series),
+                        "SPY": summary_stats(spy),
+                        "Market Beating Portfolio": summary_stats(house_slice) if not house_slice.empty else house_stats,
+                    }
+                )
+                st.dataframe(_format_stats_frame(builder_stats), use_container_width=True)
+
+                _render_section_title("Portfolio Growth")
+                growth = pd.concat(
+                    [
+                        (1 + portfolio_series).cumprod().rename("Fund Portfolio"),
+                        (1 + spy).cumprod().rename("SPY"),
+                        (1 + house_slice).cumprod().rename("Market Beating Portfolio"),
+                    ],
+                    axis=1,
+                ).dropna(how="all")
+                st.line_chart(growth)
+
+                lower_cols = st.columns([1.0, 1.0])
+                with lower_cols[0]:
+                    _render_section_title("Fund Portfolio Weights")
+                    st.dataframe(weights.style.format({"weight": _format_pct}), use_container_width=True)
+                with lower_cols[1]:
+                    _render_section_title("Stress Windows vs SPY")
+                    stress = compute_stress_table(portfolio_series, spy)
+                    if stress.empty:
+                        st.info("Not enough overlapping history for stress windows.")
+                    else:
+                        st.dataframe(
+                            stress.style.format({"Portfolio Return": _format_pct, "SPY Return": _format_pct}),
+                            use_container_width=True,
+                        )
 
 
 def _render_screener(context: Dict[str, object]) -> None:
@@ -1181,6 +1465,8 @@ def main() -> None:
         _render_portfolio_lab(context)
     elif page == "Compare":
         _render_compare(context)
+    elif page == "Morningstar":
+        _render_morningstar(context)
     elif page == "Macro":
         _render_macro(context)
     else:
