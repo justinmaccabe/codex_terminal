@@ -1166,6 +1166,15 @@ def _render_portfolio_lab(context: Dict[str, object]) -> None:
 def _render_compare(context: Dict[str, object]) -> None:
     st.subheader("Compare")
     st.write("Upload a portfolio with `ticker` and `weight` columns.")
+    template_csv = "ticker,weight\nSPY,0.60\nBND,0.40\n"
+    st.download_button(
+        "Get a Template",
+        data=template_csv,
+        file_name="portfolio_template.csv",
+        mime="text/csv",
+        help="Download a sample CSV with the required column headers.",
+        use_container_width=False,
+    )
     uploaded = st.file_uploader("Portfolio CSV", type=["csv"])
 
     if uploaded is None:

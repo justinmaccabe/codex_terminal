@@ -47,6 +47,48 @@ def inverse_vol_weights(asset_returns: pd.DataFrame, tickers: Iterable[str], loo
     return pd.DataFrame({"ticker": weights.index, "weight": weights.values})
 
 
+def score_portfolio(
+    portfolio_returns: pd.Series,
+    asset_returns: pd.DataFrame | None = None,
+    weights: np.ndarray | None = None,
+) -> float:
+    stats = summary_stats(portfolio_returns)
+    sharpe = stats["Sharpe"] if not np.isnan(stats["Sharpe"]) else -1.0
+    sortino = stats["Sortino"] if not np.isnan(stats["Sortino"]) else -1.0
+    drawdown = stats["Max Drawdown"] if not np.isnan(stats["Max Drawdown"]) else -0.5
+    cagr = stats["CAGR"] if not np.isnan(stats["CAGR"]) else -0.25
+
+    stress_penalty = 0.0
+    worst_stress = np.nan
+    if asset_returns is not None and "SPY" in asset_returns:
+        stress = compute_stress_table(portfolio_returns, asset_returns["SPY"].dropna())
+        if not stress.empty:
+            worst_stress = stress["Portfolio Return"].min()
+            if not pd.isna(worst_stress):
+                stress_penalty = abs(min(worst_stress, 0.0)) * 1.3
+
+    concentration_penalty = 0.0
+    correlation_penalty = 0.0
+    if weights is not None and len(weights) > 0:
+        concentration_penalty = float(np.square(weights).sum()) * 0.55
+        if asset_returns is not None and asset_returns.shape[1] > 1:
+            corr = asset_returns.corr().fillna(0.0).values
+            correlation_penalty = float(weights @ corr @ weights) * 0.18
+
+    drawdown_penalty = abs(min(drawdown, 0.0)) * 1.6
+    downside_bonus = max(cagr, -0.25) * 0.35
+
+    return (
+        sharpe
+        + 0.55 * sortino
+        + downside_bonus
+        - drawdown_penalty
+        - stress_penalty
+        - concentration_penalty
+        - correlation_penalty
+    )
+
+
 def random_search_optimize(
     asset_returns: pd.DataFrame,
     tickers: Iterable[str],
@@ -66,12 +108,7 @@ def random_search_optimize(
     for _ in range(trials):
         w = rng.dirichlet(np.ones(len(names)))
         port = data.mul(w, axis=1).sum(axis=1)
-        stats = summary_stats(port)
-        score = (
-            (stats["Sharpe"] if not np.isnan(stats["Sharpe"]) else -1.0)
-            + 0.35 * (stats["Sortino"] if not np.isnan(stats["Sortino"]) else -1.0)
-            + 2.0 * (stats["Max Drawdown"] if not np.isnan(stats["Max Drawdown"]) else -0.5)
-        )
+        score = score_portfolio(port, data, w)
         if score > best_score:
             best_score = score
             best_weights = w

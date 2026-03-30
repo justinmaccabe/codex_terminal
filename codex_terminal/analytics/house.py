@@ -12,25 +12,26 @@ from codex_terminal.analytics.portfolio import (
     inverse_vol_weights,
     leverage_to_match_spy_vol,
     random_search_optimize,
+    score_portfolio,
 )
 from codex_terminal.config.universe import universe_by_ticker
 from codex_terminal.portfolio.compare import portfolio_returns
 
 
 STRATEGIC_CORE_WEIGHTS: Dict[str, float] = {
-    "VTI": 0.14,
-    "VBR": 0.09,
-    "VEA": 0.10,
-    "IVLU": 0.05,
+    "VTI": 0.12,
+    "VBR": 0.10,
+    "VEA": 0.08,
+    "IVLU": 0.06,
     "VWO": 0.08,
-    "AVES": 0.04,
-    "VGIT": 0.11,
+    "AVES": 0.06,
+    "VGIT": 0.08,
     "TLT": 0.08,
     "TIP": 0.08,
     "VNQ": 0.05,
     "PDBC": 0.07,
     "GLDM": 0.05,
-    "WTMF": 0.05,
+    "WTMF": 0.06,
     "SGOV": 0.01,
 }
 
@@ -119,6 +120,46 @@ def _normalize_holdings(frame: pd.DataFrame) -> pd.DataFrame:
     return holdings.sort_values("weight", ascending=False).reset_index(drop=True)
 
 
+def _optimize_around_anchor(
+    asset_returns: pd.DataFrame,
+    anchor: pd.DataFrame,
+    seed: int,
+    trials: int,
+    max_shift: float,
+) -> pd.DataFrame:
+    names = [ticker for ticker in anchor["ticker"].tolist() if ticker in asset_returns.columns]
+    if not names:
+        return anchor[["ticker", "strategic_weight", "stance", "composite_percentile", "tactical_score", "macro_score", "composite_score", "weight"]]
+
+    data = asset_returns[names].dropna(how="all")
+    if data.empty:
+        return anchor
+
+    anchor_weights = anchor.set_index("ticker").loc[names, "weight"].astype(float).values
+    rng = np.random.default_rng(seed)
+    best_weights = anchor_weights.copy()
+    best_score = score_portfolio(data.mul(best_weights, axis=1).sum(axis=1), data, best_weights)
+
+    for _ in range(trials):
+        noise = rng.normal(0.0, max_shift, len(names))
+        trial = np.clip(anchor_weights + noise, 0.0, None)
+        if trial.sum() <= 0:
+            continue
+        trial = trial / trial.sum()
+        if np.max(np.abs(trial - anchor_weights)) > max_shift * 2.2:
+            continue
+        port = data.mul(trial, axis=1).sum(axis=1)
+        score = score_portfolio(port, data, trial)
+        if score > best_score:
+            best_score = score
+            best_weights = trial.copy()
+
+    optimized = anchor.copy()
+    optimized["weight"] = optimized["ticker"].map(dict(zip(names, best_weights)))
+    optimized["weight"] = optimized["weight"].fillna(optimized["weight"])
+    return _normalize_holdings(optimized)
+
+
 def _build_mode_holdings(
     asset_returns: pd.DataFrame,
     screener: pd.DataFrame,
@@ -129,7 +170,8 @@ def _build_mode_holdings(
 
     if mode == "Strategic + Tactical":
         base["weight"] = base["bounded_weight"]
-        return _normalize_holdings(base.drop(columns=["raw_weight", "bounded_weight"]))
+        tactical = _normalize_holdings(base.drop(columns=["raw_weight", "bounded_weight"]))
+        return _optimize_around_anchor(asset_returns, tactical, seed=21, trials=2200, max_shift=0.035)
 
     if mode == "Risk Parity":
         rp = inverse_vol_weights(asset_returns, tickers).rename(columns={"weight": "mode_weight"})
@@ -145,15 +187,15 @@ def _build_mode_holdings(
         merged = base.merge(ms, on="ticker", how="left")
         merged["weight"] = merged["mode_weight"].fillna(merged["strategic_weight"])
         merged = merged.drop(columns=["mode_weight"])
-        return _normalize_holdings(merged)
+        return _optimize_around_anchor(asset_returns, _normalize_holdings(merged), seed=33, trials=1600, max_shift=0.025)
 
     # Blend
     tactical = _build_mode_holdings(asset_returns, screener, "Strategic + Tactical")
     max_sharpe = _build_mode_holdings(asset_returns, screener, "Max Sharpe")
     merged = tactical.merge(max_sharpe[["ticker", "weight"]], on="ticker", suffixes=("", "_ms"))
-    merged["weight"] = 0.55 * merged["weight"] + 0.45 * merged["weight_ms"]
+    merged["weight"] = 0.65 * merged["weight"] + 0.35 * merged["weight_ms"]
     merged = merged.drop(columns=["weight_ms"])
-    return _normalize_holdings(merged)
+    return _optimize_around_anchor(asset_returns, _normalize_holdings(merged), seed=57, trials=1800, max_shift=0.02)
 
 
 def _diagnostics(holdings: pd.DataFrame, stats: Dict[str, float], spy_stats: Dict[str, float]) -> List[str]:
@@ -165,6 +207,12 @@ def _diagnostics(holdings: pd.DataFrame, stats: Dict[str, float], spy_stats: Dic
         notes.append("The house benchmark still trails SPY on Sharpe; leverage is amplifying a weaker engine.")
     if stats.get("Max Drawdown", 0) < spy_stats.get("Max Drawdown", 0):
         notes.append("Drawdown profile is still harsher than SPY despite diversification.")
+    if holdings["weight"].sum() > 0:
+        diversifiers = holdings.loc[holdings["ticker"].map(lambda x: universe_by_ticker()[x].diversifier), "weight"].sum()
+        if diversifiers < 0.30:
+            notes.append("Diversifier weight is still light; the portfolio may be too equity-adjacent to deserve leverage.")
+        else:
+            notes.append(f"Diversifiers account for {diversifiers:.1%} of capital, which improves the odds that leverage is scaling a broader return engine.")
     if not notes:
         notes.append("Current construction is behaving reasonably versus SPY on the chosen sample.")
     return notes
