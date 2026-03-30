@@ -59,6 +59,8 @@ class HousePortfolioModel:
     net_target_vol_series: pd.Series
     net_target_vol_stats: Dict[str, float]
     research_table: pd.DataFrame
+    expected_return_table: pd.DataFrame
+    crisis_alpha_table: pd.DataFrame
     subperiod_table: pd.DataFrame
     diagnostics: List[str]
 
@@ -161,6 +163,108 @@ def _normalize_holdings(frame: pd.DataFrame) -> pd.DataFrame:
     holdings["weight"] = holdings["weight"] / holdings["weight"].sum()
     holdings["tilt_vs_strategic"] = holdings["weight"] - holdings["strategic_weight"]
     return holdings.sort_values("weight", ascending=False).reset_index(drop=True)
+
+
+def _crisis_alpha_scores(asset_returns: pd.DataFrame, spy_returns: pd.Series) -> pd.Series:
+    names = [ticker for ticker in STRATEGIC_CORE_WEIGHTS if ticker in asset_returns.columns]
+    if not names or spy_returns.empty:
+        return pd.Series(0.0, index=list(STRATEGIC_CORE_WEIGHTS.keys()), dtype=float)
+    scores: dict[str, float] = {}
+    for ticker in names:
+        excess: list[float] = []
+        for _, (start, end) in SUBPERIOD_WINDOWS.items():
+            window = pd.concat(
+                [
+                    asset_returns[ticker].rename("asset"),
+                    spy_returns.rename("spy"),
+                ],
+                axis=1,
+            ).loc[start:end] if end else pd.concat(
+                [
+                    asset_returns[ticker].rename("asset"),
+                    spy_returns.rename("spy"),
+                ],
+                axis=1,
+            ).loc[start:]
+            window = window.dropna()
+            if window.empty:
+                continue
+            spy_total = (1 + window["spy"]).prod() - 1
+            if spy_total < 0:
+                asset_total = (1 + window["asset"]).prod() - 1
+                excess.append(asset_total - spy_total)
+        scores[ticker] = float(np.mean(excess)) if excess else 0.0
+    series = pd.Series(scores, dtype=float)
+    if series.empty or np.isclose(series.std(ddof=0), 0.0):
+        return series.reindex(list(STRATEGIC_CORE_WEIGHTS.keys()), fill_value=0.0)
+    series = (series - series.mean()) / series.std(ddof=0)
+    return series.reindex(list(STRATEGIC_CORE_WEIGHTS.keys()), fill_value=0.0)
+
+
+def _expected_return_scores(asset_returns: pd.DataFrame) -> pd.DataFrame:
+    rows: list[dict[str, float | str]] = []
+    known = universe_by_ticker()
+    clean = (1 + asset_returns).cumprod() if not asset_returns.empty else pd.DataFrame()
+    for ticker in STRATEGIC_CORE_WEIGHTS:
+        asset = known[ticker]
+        value = 0.0
+        carry = 0.0
+        diversification = 0.0
+        momentum = 0.0
+        if "Value" in asset.style:
+            value += 1.0
+        if asset.style in {"Size", "Size + Value"}:
+            value += 0.5
+        if asset.style in {"Cash", "Short Duration", "Intermediate Duration", "Long Duration", "Aggregate", "Inflation-Linked"}:
+            carry += 0.5
+        if asset.style in {"Trend", "Momentum"}:
+            momentum += 0.6
+        if asset.diversifier:
+            diversification += 0.5
+        if ticker in clean.columns and len(clean) > 756:
+            three_year = clean[ticker].iloc[-1] / clean[ticker].iloc[-757] - 1
+            if not pd.isna(three_year):
+                value += max(-three_year, 0.0)
+                momentum += max(three_year, 0.0) * 0.35
+        expected = 0.45 * value + 0.20 * carry + 0.20 * diversification + 0.15 * momentum
+        rows.append(
+            {
+                "Ticker": ticker,
+                "Value Lens": value,
+                "Carry Lens": carry,
+                "Diversification Lens": diversification,
+                "Momentum Lens": momentum,
+                "Expected Return Score": expected,
+            }
+        )
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        score = frame["Expected Return Score"]
+        if not np.isclose(score.std(ddof=0), 0.0):
+            frame["Expected Return Score"] = (score - score.mean()) / score.std(ddof=0)
+    return frame.sort_values("Expected Return Score", ascending=False).reset_index(drop=True)
+
+
+def _crisis_alpha_table(asset_returns: pd.DataFrame, spy_returns: pd.Series) -> pd.DataFrame:
+    scores = _crisis_alpha_scores(asset_returns, spy_returns)
+    rows: list[dict[str, float | str]] = []
+    for ticker in STRATEGIC_CORE_WEIGHTS:
+        asset = asset_returns.get(ticker, pd.Series(dtype=float))
+        relative = np.nan
+        if not asset.empty and not spy_returns.empty:
+            joined = pd.concat([asset.rename("asset"), spy_returns.rename("spy")], axis=1).dropna()
+            if not joined.empty:
+                mask = joined["spy"] < 0
+                if mask.any():
+                    relative = joined.loc[mask, "asset"].mean() - joined.loc[mask, "spy"].mean()
+        rows.append(
+            {
+                "Ticker": ticker,
+                "Crisis Alpha Score": scores.get(ticker, 0.0),
+                "Avg Daily Excess In SPY Down Days": relative,
+            }
+        )
+    return pd.DataFrame(rows).sort_values("Crisis Alpha Score", ascending=False).reset_index(drop=True)
 
 
 def _optimize_around_anchor(
@@ -286,9 +390,19 @@ def _build_subperiod_table(
 def _build_mode_holdings(
     asset_returns: pd.DataFrame,
     screener: pd.DataFrame,
+    spy_returns: pd.Series,
     mode: str,
 ) -> pd.DataFrame:
     base = _score_tilt_rows(screener)
+    crisis_alpha = _crisis_alpha_scores(asset_returns, spy_returns)
+    expected_scores = _expected_return_scores(asset_returns).set_index("Ticker")["Expected Return Score"]
+    base["crisis_alpha_score"] = base["ticker"].map(crisis_alpha).fillna(0.0)
+    base["expected_return_score"] = base["ticker"].map(expected_scores).fillna(0.0)
+    base["bounded_weight"] = base["bounded_weight"] * (
+        1.0
+        + 0.06 * np.clip(base["expected_return_score"], -1.0, 1.0)
+        + 0.08 * np.clip(base["crisis_alpha_score"], -1.0, 1.0)
+    )
     tickers = list(STRATEGIC_CORE_WEIGHTS.keys())
 
     if mode == "Strategic + Tactical":
@@ -313,8 +427,8 @@ def _build_mode_holdings(
         return _optimize_around_anchor(asset_returns, _normalize_holdings(merged), seed=33, trials=1600, max_shift=0.025)
 
     # Blend
-    tactical = _build_mode_holdings(asset_returns, screener, "Strategic + Tactical")
-    max_sharpe = _build_mode_holdings(asset_returns, screener, "Max Sharpe")
+    tactical = _build_mode_holdings(asset_returns, screener, spy_returns, "Strategic + Tactical")
+    max_sharpe = _build_mode_holdings(asset_returns, screener, spy_returns, "Max Sharpe")
     merged = tactical.merge(max_sharpe[["ticker", "weight"]], on="ticker", suffixes=("", "_ms"))
     merged["weight"] = 0.65 * merged["weight"] + 0.35 * merged["weight_ms"]
     merged = merged.drop(columns=["weight_ms"])
@@ -348,7 +462,7 @@ def build_market_beating_portfolio(
     mode: str = "Strategic + Tactical",
     financing_rate: float = 0.04,
 ) -> HousePortfolioModel:
-    holdings = _build_mode_holdings(asset_returns, screener, mode)
+    holdings = _build_mode_holdings(asset_returns, screener, spy_returns, mode)
 
     series = portfolio_returns(holdings[["ticker", "weight"]], asset_returns)
     stats = summary_stats(series) if not series.empty else {}
@@ -362,6 +476,8 @@ def build_market_beating_portfolio(
     stress_table = compute_stress_table(series, spy_returns) if not series.empty else pd.DataFrame()
     diagnostics = _diagnostics(holdings, net_target_vol_stats or target_vol_stats or stats, spy_stats)
     research_table = _build_research_table(holdings)
+    expected_return_table = _expected_return_scores(asset_returns)
+    crisis_alpha_table = _crisis_alpha_table(asset_returns, spy_returns)
     subperiod_table = _build_subperiod_table(net_target_vol_series if not net_target_vol_series.empty else target_vol_series, spy_returns)
 
     return HousePortfolioModel(
@@ -377,6 +493,8 @@ def build_market_beating_portfolio(
         net_target_vol_series=net_target_vol_series,
         net_target_vol_stats=net_target_vol_stats,
         research_table=research_table,
+        expected_return_table=expected_return_table,
+        crisis_alpha_table=crisis_alpha_table,
         subperiod_table=subperiod_table,
         diagnostics=diagnostics,
     )

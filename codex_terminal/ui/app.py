@@ -453,25 +453,59 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             use_container_width=True,
         )
 
-    _render_section_title("Benchmark Committee")
-    committee = summarize_house_modes(
-        context["returns"],
-        context["screener"],
-        context["returns"].get("SPY", pd.Series(dtype=float)),
-        house_model.financing_rate,
-    )
-    st.dataframe(
-        committee.style.format(
-            {
-                "Gross Sharpe": _format_float,
-                "Net Sharpe": _format_float,
-                "Net CAGR": _format_pct,
-                "Net Max Drawdown": _format_pct,
-                "Leverage": _format_float,
-            }
-        ),
-        use_container_width=True,
-    )
+    research_tabs = st.tabs(["Expected Return Lenses", "Crisis Alpha", "Benchmark Committee"])
+    with research_tabs[0]:
+        if house_model.expected_return_table.empty:
+            st.info("Expected return lens table unavailable.")
+        else:
+            st.dataframe(
+                house_model.expected_return_table.style.format(
+                    {
+                        "Value Lens": _format_float,
+                        "Carry Lens": _format_float,
+                        "Diversification Lens": _format_float,
+                        "Momentum Lens": _format_float,
+                        "Expected Return Score": _format_float,
+                    }
+                ),
+                use_container_width=True,
+            )
+            st.caption("This is a heuristic expected-return stack, not a full capital-markets model. It combines value, carry, diversification, and trend context to show which sleeves are most likely to improve the benchmark engine.")
+
+    with research_tabs[1]:
+        if house_model.crisis_alpha_table.empty:
+            st.info("Crisis alpha table unavailable.")
+        else:
+            st.dataframe(
+                house_model.crisis_alpha_table.style.format(
+                    {
+                        "Crisis Alpha Score": _format_float,
+                        "Avg Daily Excess In SPY Down Days": _format_pct,
+                    }
+                ),
+                use_container_width=True,
+            )
+            st.caption("Crisis alpha highlights sleeves that historically held up or improved relative to SPY when SPY was under stress. These are the sleeves most likely to justify leverage in a diversified benchmark.")
+
+    with research_tabs[2]:
+        committee = summarize_house_modes(
+            context["returns"],
+            context["screener"],
+            context["returns"].get("SPY", pd.Series(dtype=float)),
+            house_model.financing_rate,
+        )
+        st.dataframe(
+            committee.style.format(
+                {
+                    "Gross Sharpe": _format_float,
+                    "Net Sharpe": _format_float,
+                    "Net CAGR": _format_pct,
+                    "Net Max Drawdown": _format_pct,
+                    "Leverage": _format_float,
+                }
+            ),
+            use_container_width=True,
+        )
 
 
 def _render_terminal(context: Dict[str, object]) -> None:
