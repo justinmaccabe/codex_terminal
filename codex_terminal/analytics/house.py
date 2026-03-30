@@ -132,19 +132,19 @@ def _build_mode_holdings(
         return _normalize_holdings(base.drop(columns=["raw_weight", "bounded_weight"]))
 
     if mode == "Risk Parity":
-        rp = inverse_vol_weights(asset_returns, tickers)
+        rp = inverse_vol_weights(asset_returns, tickers).rename(columns={"weight": "mode_weight"})
         base = base.drop(columns=["raw_weight", "bounded_weight"])
-        merged = base.merge(rp, on="ticker", how="left", suffixes=("", "_new"))
-        merged["weight"] = merged["weight_new"].fillna(merged["strategic_weight"])
-        merged = merged.drop(columns=["weight_new"])
+        merged = base.merge(rp, on="ticker", how="left")
+        merged["weight"] = merged["mode_weight"].fillna(merged["strategic_weight"])
+        merged = merged.drop(columns=["mode_weight"])
         return _normalize_holdings(merged)
 
     if mode == "Max Sharpe":
-        ms = random_search_optimize(asset_returns, tickers, trials=3500)
+        ms = random_search_optimize(asset_returns, tickers, trials=3500).rename(columns={"weight": "mode_weight"})
         base = base.drop(columns=["raw_weight", "bounded_weight"])
-        merged = base.merge(ms, on="ticker", how="left", suffixes=("", "_new"))
-        merged["weight"] = merged["weight_new"].fillna(merged["strategic_weight"])
-        merged = merged.drop(columns=["weight_new"])
+        merged = base.merge(ms, on="ticker", how="left")
+        merged["weight"] = merged["mode_weight"].fillna(merged["strategic_weight"])
+        merged = merged.drop(columns=["mode_weight"])
         return _normalize_holdings(merged)
 
     # Blend
