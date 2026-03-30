@@ -18,5 +18,6 @@ This app uses external market-data requests, so Snowflake deployment needs:
 - host allowlisting for Yahoo Finance, FRED, and Vanguard
 
 Use [snowflake.sql](/Users/optadmin/Documents/Playground/snowflake.sql) as the starting template.
+For Snowflake-specific package setup, use [environment.snowflake.yml](/Users/optadmin/Documents/Playground/environment.snowflake.yml).
 
 If you deploy with Snowflake CLI, you will also need local Snowflake auth configured first.
