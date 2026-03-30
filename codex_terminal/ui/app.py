@@ -256,6 +256,9 @@ def _render_sidebar() -> str:
         index=HOUSE_BENCHMARK_MODES.index(current_mode) if current_mode in HOUSE_BENCHMARK_MODES else 0,
     )
     default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
+    pending_page = st.session_state.pop("pending_nav_page", None)
+    if pending_page in PAGES:
+        st.session_state["nav_page"] = pending_page
     current_page = st.session_state.get("nav_page", default_page)
     if current_page not in PAGES:
         current_page = default_page
@@ -576,12 +579,12 @@ def _render_welcome(context: Dict[str, object]) -> None:
     with cta_cols[0]:
         if st.button("Start With Morning Brief", use_container_width=True):
             st.session_state["onboarding_seen"] = True
-            st.session_state["nav_page"] = "Morning Brief"
+            st.session_state["pending_nav_page"] = "Morning Brief"
             st.rerun()
     with cta_cols[1]:
         if st.button("Go To Compare", use_container_width=True):
             st.session_state["onboarding_seen"] = True
-            st.session_state["nav_page"] = "Compare"
+            st.session_state["pending_nav_page"] = "Compare"
             st.rerun()
 
 
