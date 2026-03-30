@@ -301,11 +301,17 @@ def _optimize_around_anchor(
 ) -> pd.DataFrame:
     names = [ticker for ticker in anchor["ticker"].tolist() if ticker in asset_returns.columns]
     if not names:
-        return anchor[["ticker", "strategic_weight", "stance", "composite_percentile", "tactical_score", "macro_score", "composite_score", "weight"]]
+        fallback = anchor.copy()
+        if "weight" not in fallback.columns:
+            fallback["weight"] = fallback.get("strategic_weight", 0.0)
+        return _normalize_holdings(fallback)
 
     data = asset_returns[names].dropna(how="all")
     if data.empty:
-        return anchor
+        fallback = anchor.copy()
+        if "weight" not in fallback.columns:
+            fallback["weight"] = fallback.get("strategic_weight", 0.0)
+        return _normalize_holdings(fallback)
 
     anchor_weights = anchor.set_index("ticker").loc[names, "weight"].astype(float).values
     rng = np.random.default_rng(seed)
