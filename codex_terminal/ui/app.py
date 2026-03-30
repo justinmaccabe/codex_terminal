@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
+import numpy as np
 import pandas as pd
 import streamlit as st
 
@@ -41,7 +42,7 @@ from codex_terminal.portfolio.compare import compare_stats, normalize_portfolio_
 
 
 PAGES = ["Welcome", "Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Morningstar", "Macro", "Learn"]
-DEFAULT_FUND_TICKERS = ["VTSAX", "VFIAX", "VWELX", "FBALX"]
+DEFAULT_FUND_TICKERS: list[str] = []
 
 
 def _format_pct(value: float) -> str:
@@ -901,18 +902,18 @@ def _parse_fund_tickers(raw_value: str) -> list[str]:
 
 
 def _render_morningstar(context: Dict[str, object]) -> None:
-    st.subheader("Morningstar")
-    st.write("Mutual fund research, side-by-side comparison, and model fund portfolio building.")
+    st.subheader("Morningstar Canada")
+    st.write("Canadian mutual fund research, side-by-side comparison, and model portfolio building.")
 
     with st.container():
         st.markdown(
             """
             <div class="info-panel">
-                <div class="info-panel-title">How To Use This Page</div>
+                <div class="info-panel-title">Canadian Mutual Fund Workbench</div>
                 <div class="info-panel-copy">
-                    Start with a short list of mutual funds you actually want to compare. The app will pull live history,
-                    surface basic fund metadata, compare performance and diversification, and let you build a simple model
-                    portfolio against SPY and the Market Beating Portfolio.
+                    This page is now scoped to Canadian mutual funds only. Enter a short list of Yahoo Finance fund symbols,
+                    and the app will filter for Canadian mutual funds, surface fund metadata, compare performance and diversification,
+                    and let you build a simple model portfolio against SPY and the Market Beating Portfolio.
                 </div>
             </div>
             """,
@@ -921,14 +922,15 @@ def _render_morningstar(context: Dict[str, object]) -> None:
 
     default_raw = ", ".join(st.session_state.get("morningstar_tickers", DEFAULT_FUND_TICKERS))
     raw_tickers = st.text_input(
-        "Mutual fund tickers",
+        "Canadian mutual fund tickers",
         value=default_raw,
-        help="Enter Yahoo Finance mutual fund tickers, separated by commas.",
+        help="Enter Yahoo Finance Canadian mutual fund tickers, separated by commas. Canadian fund symbols often use fund codes or .CF suffixes.",
+        placeholder="Example: enter your Canadian mutual fund symbols here",
     )
     fund_tickers = _parse_fund_tickers(raw_tickers)
     st.session_state["morningstar_tickers"] = fund_tickers
     if not fund_tickers:
-        st.info("Enter at least one mutual fund ticker to begin.")
+        st.info("Enter at least one Canadian mutual fund ticker to begin.")
         return
 
     horizon = st.selectbox(
@@ -943,22 +945,32 @@ def _render_morningstar(context: Dict[str, object]) -> None:
         "10Y": "2016-01-01",
         "Max": "2010-01-01",
     }
-    benchmark_options = fund_tickers + ["SPY", "Market Beating Portfolio"]
-    selected_benchmark = st.selectbox("Comparison benchmark", benchmark_options, index=min(len(benchmark_options) - 1, benchmark_options.index("SPY") if "SPY" in benchmark_options else 0))
-
     fund_prices = fetch_price_history(fund_tickers + ["SPY"], start=horizon_map[horizon])
     fund_returns = compute_returns(fund_prices)
     profiles = fetch_fund_profiles(fund_tickers)
-    available_funds = [ticker for ticker in fund_tickers if ticker in fund_returns.columns]
+    canadian_profiles = profiles[profiles["is_canadian_mutual_fund"]].copy() if not profiles.empty else pd.DataFrame()
+    excluded = [ticker for ticker in fund_tickers if ticker not in canadian_profiles["ticker"].tolist()]
+    available_funds = [ticker for ticker in canadian_profiles["ticker"].tolist() if ticker in fund_returns.columns]
+    if excluded:
+        st.warning(
+            "Excluded non-Canadian or non-mutual-fund tickers: "
+            + ", ".join(excluded)
+        )
     if not available_funds:
-        st.warning("No overlapping price history returned for the selected mutual funds.")
+        st.warning("No overlapping price history returned for the selected Canadian mutual funds.")
         return
+    benchmark_options = available_funds + ["SPY", "Market Beating Portfolio"]
+    selected_benchmark = st.selectbox(
+        "Comparison benchmark",
+        benchmark_options,
+        index=min(len(benchmark_options) - 1, benchmark_options.index("SPY") if "SPY" in benchmark_options else 0),
+    )
 
     latest_prices = latest_available(fund_prices[available_funds]) if not fund_prices.empty else pd.Series(dtype=float)
     loaded = len(available_funds)
     _render_desk_grid(
         [
-            ("Funds Loaded", str(loaded), f"of {len(fund_tickers)} requested"),
+            ("Canadian Funds Loaded", str(loaded), f"of {len(fund_tickers)} requested"),
             ("Primary Benchmark", selected_benchmark, "comparison base"),
             ("History Window", horizon, f"since {horizon_map[horizon]}"),
             ("House Mode", context["house_model"].mode, "current benchmark engine"),
@@ -969,22 +981,32 @@ def _render_morningstar(context: Dict[str, object]) -> None:
 
     with research_tabs[0]:
         _render_section_title("Fund Profiles")
-        if profiles.empty:
+        if canadian_profiles.empty:
             st.info("Fund metadata is unavailable right now.")
         else:
-            display = profiles.copy()
+            display = canadian_profiles.copy()
             if not latest_prices.empty:
                 display["latest_price"] = display["ticker"].map(latest_prices.to_dict())
+            summary_cols = st.columns(3)
+            with summary_cols[0]:
+                st.metric("Families", int(display["family"].replace("Unavailable", pd.NA).dropna().nunique()))
+            with summary_cols[1]:
+                st.metric("Categories", int(display["category"].replace("Unavailable", pd.NA).dropna().nunique()))
+            with summary_cols[2]:
+                avg_expense = display["expense_ratio"].dropna().mean()
+                st.metric("Avg Expense Ratio", _format_pct(avg_expense))
+
             summary_display = display[
                 [
                     "ticker",
                     "name",
                     "category",
                     "family",
+                    "currency",
                     "expense_ratio",
                     "yield_pct",
                     "total_assets",
-                    "quote_type",
+                    "exchange",
                     "latest_price",
                 ]
             ].rename(
@@ -993,10 +1015,11 @@ def _render_morningstar(context: Dict[str, object]) -> None:
                     "name": "Fund",
                     "category": "Category",
                     "family": "Family",
+                    "currency": "Currency",
                     "expense_ratio": "Expense Ratio",
                     "yield_pct": "Yield",
                     "total_assets": "Total Assets",
-                    "quote_type": "Quote Type",
+                    "exchange": "Exchange",
                     "latest_price": "Latest Price",
                 }
             )
@@ -1013,10 +1036,20 @@ def _render_morningstar(context: Dict[str, object]) -> None:
             )
 
             selected_profile = st.selectbox("Fund profile detail", available_funds, index=0, key="fund_profile_detail")
-            row = profiles.set_index("ticker").loc[selected_profile]
+            row = canadian_profiles.set_index("ticker").loc[selected_profile]
             st.markdown(f"**{row['name']}**")
-            st.caption(f"{row['family']} | {row['category']} | {row['quote_type']}")
+            st.caption(f"{row['family']} | {row['category']} | {row['currency']} | {row['exchange']}")
             st.write(row["summary"])
+
+            family_cols = st.columns(2)
+            with family_cols[0]:
+                _render_section_title("Category Summary")
+                cat_summary = display.groupby("category", as_index=False)["ticker"].count().rename(columns={"ticker": "Funds"}).sort_values("Funds", ascending=False)
+                st.dataframe(cat_summary, use_container_width=True)
+            with family_cols[1]:
+                _render_section_title("Family Summary")
+                fam_summary = display.groupby("family", as_index=False)["ticker"].count().rename(columns={"ticker": "Funds"}).sort_values("Funds", ascending=False)
+                st.dataframe(fam_summary, use_container_width=True)
 
         _render_section_title("Historical Summary Stats")
         stats_frame = pd.DataFrame({ticker: summary_stats(fund_returns[ticker].dropna()) for ticker in available_funds})
@@ -1036,9 +1069,13 @@ def _render_morningstar(context: Dict[str, object]) -> None:
         compare_table["1Y"] = [fund_returns[ticker].tail(252).add(1).prod() - 1 for ticker in available_funds]
         compare_table["Sharpe"] = [summary_stats(fund_returns[ticker]).get("Sharpe") for ticker in available_funds]
         compare_table["Max Drawdown"] = [summary_stats(fund_returns[ticker]).get("Max Drawdown") for ticker in available_funds]
+        compare_table["Expense Ratio"] = [
+            canadian_profiles.set_index("ticker").at[ticker, "expense_ratio"] if ticker in canadian_profiles.set_index("ticker").index else np.nan
+            for ticker in available_funds
+        ]
         st.dataframe(
             compare_table.style.format(
-                {"1M": _format_pct, "3M": _format_pct, "1Y": _format_pct, "Sharpe": _format_float, "Max Drawdown": _format_pct}
+                {"1M": _format_pct, "3M": _format_pct, "1Y": _format_pct, "Sharpe": _format_float, "Max Drawdown": _format_pct, "Expense Ratio": _format_pct}
             ),
             use_container_width=True,
         )

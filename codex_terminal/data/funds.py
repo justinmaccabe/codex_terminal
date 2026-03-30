@@ -13,6 +13,9 @@ class FundProfile:
     ticker: str
     name: str
     quote_type: str
+    currency: str
+    country: str
+    exchange: str
     category: str
     family: str
     expense_ratio: float | None
@@ -20,6 +23,7 @@ class FundProfile:
     total_assets: float | None
     investment_style: str
     summary: str
+    is_canadian_mutual_fund: bool
 
 
 def _normalize_ratio(value: object) -> float | None:
@@ -35,6 +39,18 @@ def _normalize_ratio(value: object) -> float | None:
 
 
 def _build_profile(ticker: str, info: dict) -> FundProfile:
+    quote_type = str(info.get("quoteType") or "Unknown")
+    currency = str(info.get("currency") or "Unknown")
+    country = str(info.get("country") or "Unknown")
+    exchange = str(info.get("exchange") or info.get("fullExchangeName") or "Unknown")
+    is_canadian_mutual_fund = (
+        quote_type.upper() == "MUTUALFUND"
+        and (
+            currency.upper() == "CAD"
+            or country.lower() == "canada"
+            or ".CF" in ticker
+        )
+    )
     return FundProfile(
         ticker=ticker,
         name=str(
@@ -43,7 +59,10 @@ def _build_profile(ticker: str, info: dict) -> FundProfile:
             or info.get("displayName")
             or ticker
         ),
-        quote_type=str(info.get("quoteType") or "Unknown"),
+        quote_type=quote_type,
+        currency=currency,
+        country=country,
+        exchange=exchange,
         category=str(info.get("category") or info.get("fundCategory") or "Unavailable"),
         family=str(info.get("fundFamily") or info.get("family") or "Unavailable"),
         expense_ratio=_normalize_ratio(
@@ -69,6 +88,7 @@ def _build_profile(ticker: str, info: dict) -> FundProfile:
             or info.get("fundProfile")
             or "No summary available."
         ),
+        is_canadian_mutual_fund=is_canadian_mutual_fund,
     )
 
 
@@ -87,6 +107,9 @@ def fetch_fund_profiles(tickers: Iterable[str]) -> pd.DataFrame:
                 ticker=ticker,
                 name=ticker,
                 quote_type="Unavailable",
+                currency="Unavailable",
+                country="Unavailable",
+                exchange="Unavailable",
                 category="Unavailable",
                 family="Unavailable",
                 expense_ratio=None,
@@ -94,6 +117,7 @@ def fetch_fund_profiles(tickers: Iterable[str]) -> pd.DataFrame:
                 total_assets=None,
                 investment_style="Unavailable",
                 summary="Profile unavailable from Yahoo Finance.",
+                is_canadian_mutual_fund=False,
             )
         rows.append(asdict(profile))
     return pd.DataFrame(rows)
