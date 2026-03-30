@@ -19,19 +19,19 @@ from codex_terminal.portfolio.compare import portfolio_returns
 
 
 STRATEGIC_CORE_WEIGHTS: Dict[str, float] = {
-    "VTI": 0.12,
-    "VBR": 0.10,
-    "VEA": 0.08,
-    "IVLU": 0.06,
-    "VWO": 0.08,
-    "AVES": 0.06,
-    "VGIT": 0.08,
-    "TLT": 0.08,
+    "VTI": 0.10,
+    "VBR": 0.11,
+    "VEA": 0.07,
+    "IVLU": 0.07,
+    "VWO": 0.07,
+    "AVES": 0.07,
+    "VGIT": 0.07,
+    "TLT": 0.07,
     "TIP": 0.08,
     "VNQ": 0.05,
     "PDBC": 0.07,
     "GLDM": 0.05,
-    "WTMF": 0.06,
+    "WTMF": 0.09,
     "SGOV": 0.01,
 }
 
@@ -77,6 +77,36 @@ SUBPERIOD_WINDOWS: Dict[str, tuple[str, str | None]] = {
     "Inflation Shock": ("2022-01-01", "2023-12-31"),
     "Recent Tape": ("2024-01-01", None),
 }
+
+
+def summarize_house_modes(
+    asset_returns: pd.DataFrame,
+    screener: pd.DataFrame,
+    spy_returns: pd.Series,
+    financing_rate: float,
+) -> pd.DataFrame:
+    rows: list[dict[str, float | str]] = []
+    for mode in HOUSE_BENCHMARK_MODES:
+        model = build_market_beating_portfolio(
+            asset_returns,
+            screener,
+            spy_returns,
+            mode=mode,
+            financing_rate=financing_rate,
+        )
+        gross = model.target_vol_stats or {}
+        net = model.net_target_vol_stats or model.target_vol_stats or {}
+        rows.append(
+            {
+                "Mode": mode,
+                "Gross Sharpe": gross.get("Sharpe"),
+                "Net Sharpe": net.get("Sharpe"),
+                "Net CAGR": net.get("CAGR"),
+                "Net Max Drawdown": net.get("Max Drawdown"),
+                "Leverage": model.vol_target_leverage,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _score_tilt_rows(screener: pd.DataFrame) -> pd.DataFrame:

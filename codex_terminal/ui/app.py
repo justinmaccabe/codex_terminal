@@ -15,7 +15,7 @@ from codex_terminal.analytics.brief import (
 )
 from codex_terminal.analytics.exposures import classify_holdings, compare_exposure_summary, summarize_exposures
 from codex_terminal.analytics.factors import compute_factor_attribution
-from codex_terminal.analytics.house import HOUSE_BENCHMARK_MODES, build_market_beating_portfolio
+from codex_terminal.analytics.house import HOUSE_BENCHMARK_MODES, build_market_beating_portfolio, summarize_house_modes
 from codex_terminal.analytics.macro import classify_regime, macro_snapshots, regime_implications
 from codex_terminal.analytics.metrics import rolling_total_return, summary_stats
 from codex_terminal.analytics.portfolio import (
@@ -314,16 +314,17 @@ def _render_sidebar() -> str:
         HOUSE_BENCHMARK_MODES,
         index=HOUSE_BENCHMARK_MODES.index(current_mode) if current_mode in HOUSE_BENCHMARK_MODES else 0,
     )
-    current_financing = float(st.session_state.get("house_financing_rate", 0.04))
+    current_financing = float(st.session_state.get("house_financing_rate", 0.04)) * 100.0
     st.session_state["house_financing_rate"] = st.sidebar.number_input(
-        "Leverage Financing Rate",
+        "Leverage Financing Rate (%)",
         min_value=0.0,
-        max_value=0.20,
+        max_value=20.0,
         value=current_financing,
-        step=0.005,
-        format="%.3f",
+        step=0.25,
+        format="%.2f",
         help="Annual financing drag applied to borrowed capital above 1.0x gross exposure.",
     )
+    st.session_state["house_financing_rate"] = float(st.session_state["house_financing_rate"]) / 100.0
     default_page = "Welcome" if not st.session_state.get("onboarding_seen", False) else "Morning Brief"
     pending_page = st.session_state.pop("pending_nav_page", None)
     current_page = pending_page if pending_page in PAGES else st.session_state.get("nav_page", default_page)
@@ -420,6 +421,17 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
         st.caption(
             f"Gross target-vol returns are still available internally, but displayed house metrics default to the net series after a {house_model.financing_rate:.2%} financing drag."
         )
+        gross_stats = house_model.target_vol_stats or {}
+        net_stats = house_model.net_target_vol_stats or gross_stats
+        if gross_stats:
+            st.markdown("**Gross vs Net**")
+            comparison = pd.DataFrame(
+                {
+                    "Gross": gross_stats,
+                    "Net": net_stats,
+                }
+            )
+            st.dataframe(_format_stats_frame(comparison), use_container_width=True)
 
     _render_section_title("Subperiod Scorecard")
     if house_model.subperiod_table.empty:
@@ -440,6 +452,26 @@ def _render_house_research_block(context: Dict[str, object], title: str = "House
             ),
             use_container_width=True,
         )
+
+    _render_section_title("Benchmark Committee")
+    committee = summarize_house_modes(
+        context["returns"],
+        context["screener"],
+        context["returns"].get("SPY", pd.Series(dtype=float)),
+        house_model.financing_rate,
+    )
+    st.dataframe(
+        committee.style.format(
+            {
+                "Gross Sharpe": _format_float,
+                "Net Sharpe": _format_float,
+                "Net CAGR": _format_pct,
+                "Net Max Drawdown": _format_pct,
+                "Leverage": _format_float,
+            }
+        ),
+        use_container_width=True,
+    )
 
 
 def _render_terminal(context: Dict[str, object]) -> None:
