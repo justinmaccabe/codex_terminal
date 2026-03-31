@@ -245,6 +245,29 @@ def _render_section_title(title: str) -> None:
     st.markdown(f'<div class="section-title">{title}</div>', unsafe_allow_html=True)
 
 
+def _render_info_panel(title: str, copy: str) -> None:
+    st.markdown(
+        f"""
+        <div class="info-panel">
+            <div class="info-panel-title">{title}</div>
+            <div class="info-panel-copy">{copy}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _render_rank_bar_chart(frame: pd.DataFrame, label_col: str, value_col: str, ascending: bool = False, limit: int = 8) -> None:
+    if frame.empty or value_col not in frame.columns:
+        st.info("Chart unavailable.")
+        return
+    chart = frame[[label_col, value_col]].dropna().sort_values(value_col, ascending=ascending).head(limit).set_index(label_col)
+    if chart.empty:
+        st.info("Chart unavailable.")
+        return
+    st.bar_chart(chart, height=280)
+
+
 @st.dialog("Configure Vanguard Target Retirement Benchmark")
 def _configure_vanguard_dialog() -> None:
     with st.form("vanguard_dialog_form"):
@@ -703,22 +726,44 @@ def _render_morning_brief(context: Dict[str, object]) -> None:
         if pulse.empty:
             st.info("Not enough market history yet.")
         else:
-            st.dataframe(
-                pulse.style.format({"1M": _format_pct, "Prev 1M": _format_pct, "1M Delta": _format_pct}),
-                use_container_width=True,
-            )
+            cols = st.columns([1.25, 0.95])
+            pulse_display = pulse.reset_index(names="Ticker").rename(columns={"index": "Ticker"})
+            with cols[0]:
+                st.dataframe(
+                    pulse_display.style.format({"1M": _format_pct, "Prev 1M": _format_pct, "1M Delta": _format_pct}),
+                    use_container_width=True,
+                )
+            with cols[1]:
+                st.markdown("**Momentum Shift**")
+                _render_rank_bar_chart(pulse_display, "Ticker", "1M Delta", ascending=False)
+                st.markdown("**Current 1M Pulse**")
+                _render_rank_bar_chart(pulse_display, "Ticker", "1M", ascending=False)
 
     with tabs[1]:
         _render_section_title("What Changed")
         if changes.empty:
             st.info("Not enough signal history yet.")
         else:
-            st.dataframe(
-                changes.head(12).style.format(
-                    {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "Momentum Delta": _format_pct, "Trend": "{:.2f}"}
-                ),
-                use_container_width=True,
-            )
+            cols = st.columns([1.2, 1.0])
+            change_display = changes.head(12).reset_index(names="Ticker").rename(columns={"index": "Ticker"})
+            with cols[0]:
+                st.dataframe(
+                    change_display.style.format(
+                        {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "Momentum Delta": _format_pct, "Trend": "{:.2f}"}
+                    ),
+                    use_container_width=True,
+                )
+            with cols[1]:
+                st.markdown("**Biggest Positive Momentum Shifts**")
+                _render_rank_bar_chart(change_display, "Ticker", "Momentum Delta", ascending=False)
+                trend_breaks = (
+                    change_display["Trend Break Risk"].value_counts().rename_axis("Risk").to_frame("Count")
+                    if "Trend Break Risk" in change_display.columns
+                    else pd.DataFrame()
+                )
+                if not trend_breaks.empty:
+                    st.markdown("**Trend Break Watchlist**")
+                    st.bar_chart(trend_breaks, height=180)
 
     with tabs[2]:
         _render_section_title("What's Hot")
@@ -726,19 +771,26 @@ def _render_morning_brief(context: Dict[str, object]) -> None:
             st.info("Leadership unavailable.")
         else:
             cols = st.columns(2)
-            cols[0].dataframe(
-                leaders.head(8).style.format(
-                    {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "6M": _format_pct, "Trend": "{:.2f}", "Composite Score": "{:.2f}"}
-                ),
-                use_container_width=True,
-            )
-            cols[1].markdown("**What's Not**")
-            cols[1].dataframe(
-                leaders.tail(8).sort_values("Composite Score").style.format(
-                    {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "6M": _format_pct, "Trend": "{:.2f}", "Composite Score": "{:.2f}"}
-                ),
-                use_container_width=True,
-            )
+            hot = leaders.head(8).reset_index(names="Ticker").rename(columns={"index": "Ticker"})
+            cold = leaders.tail(8).sort_values("Composite Score").reset_index(names="Ticker").rename(columns={"index": "Ticker"})
+            with cols[0]:
+                st.markdown("**What's Hot**")
+                st.dataframe(
+                    hot.style.format(
+                        {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "6M": _format_pct, "Trend": "{:.2f}", "Composite Score": "{:.2f}"}
+                    ),
+                    use_container_width=True,
+                )
+                _render_rank_bar_chart(hot, "Ticker", "Composite Score", ascending=False)
+            with cols[1]:
+                st.markdown("**What's Not**")
+                st.dataframe(
+                    cold.style.format(
+                        {"1W Proxy": _format_pct, "1M": _format_pct, "3M": _format_pct, "6M": _format_pct, "Trend": "{:.2f}", "Composite Score": "{:.2f}"}
+                    ),
+                    use_container_width=True,
+                )
+                _render_rank_bar_chart(cold, "Ticker", "Composite Score", ascending=True)
 
     with tabs[3]:
         _render_section_title("Diversification Health")
@@ -1258,6 +1310,47 @@ def _render_screener(context: Dict[str, object]) -> None:
         height=560,
     )
     st.caption("Composite ranks combine tactical, structural, and macro blocks. Tactical inputs still carry the largest weight in this build.")
+    with st.expander("How to read the screener", expanded=True):
+        guide = pd.DataFrame(
+            [
+                {
+                    "Measure": "Absolute Momentum",
+                    "What it measures": "Medium-term trailing return. Higher means the sleeve has been delivering stronger price performance.",
+                    "How to read it": "Positive and rising is supportive. Negative means the tape has weakened.",
+                },
+                {
+                    "Measure": "Relative Momentum",
+                    "What it measures": "Cross-sectional rank versus the rest of the universe.",
+                    "How to read it": "Near 1.00 means leadership. Near 0.00 means laggard.",
+                },
+                {
+                    "Measure": "Trend",
+                    "What it measures": "Whether price is above the 50-day and 200-day moving averages.",
+                    "How to read it": "1.00 = above both, 0.50 = mixed trend, 0.00 = below both.",
+                },
+                {
+                    "Measure": "Vol-Adjusted Strength",
+                    "What it measures": "Recent return divided by realized volatility.",
+                    "How to read it": "Higher means better reward per unit of realized risk.",
+                },
+                {
+                    "Measure": "Structural Score",
+                    "What it measures": "Slower-moving context like value, carry, and expected-return support.",
+                    "How to read it": "Higher means the sleeve looks more attractive beyond just recent price action.",
+                },
+                {
+                    "Measure": "Macro Score",
+                    "What it measures": "How well the sleeve fits the current FRED-based regime.",
+                    "How to read it": "Higher means the sleeve is more aligned with the current macro backdrop.",
+                },
+                {
+                    "Measure": "Composite Score",
+                    "What it measures": "Blended tactical, structural, and macro ranking.",
+                    "How to read it": "This is the main rank. Higher means stronger overall conviction in this build.",
+                },
+            ]
+        )
+        st.dataframe(guide, use_container_width=True, hide_index=True)
     _render_section_title("Cross-Section Dispersion")
     dispersion = pd.DataFrame(
         {
@@ -1266,6 +1359,19 @@ def _render_screener(context: Dict[str, object]) -> None:
         }
     )
     st.dataframe(dispersion.style.format({"Value": _format_pct}), use_container_width=True)
+    _render_section_title("Trader Haven")
+    trader_haven = pd.DataFrame(
+        [
+            {"Widget": "Scope Placeholder", "Current Read": "Reserved for your next prompt", "Use": "This section is ready for tape, flow, or setup tooling."},
+            {"Widget": "Top Leader", "Current Read": display.iloc[0]["Ticker"], "Use": "Current strongest sleeve in the screener."},
+            {"Widget": "Weakest Sleeve", "Current Read": display.iloc[-1]["Ticker"], "Use": "Current laggard in the screener."},
+        ]
+    )
+    st.dataframe(trader_haven, use_container_width=True, hide_index=True)
+    _render_info_panel(
+        "Trader Haven",
+        "This block is intentionally reserved for the next build. I left it visible so we can scope the trader workflow without having to rearrange the page again.",
+    )
 
 
 def _render_portfolio_lab(context: Dict[str, object]) -> None:
