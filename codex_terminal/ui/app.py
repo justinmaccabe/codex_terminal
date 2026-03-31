@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import Dict
-
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import streamlit as st
+from typing import Dict
 
 from codex_terminal.analytics.brief import (
     CORE_BRIEF_TICKERS,
@@ -1547,19 +1545,14 @@ def _render_screener(context: Dict[str, object]) -> None:
         with haven_cols[1]:
             normalized = intraday_prices[intraday_universe].ffill()
             if not normalized.empty:
+                session_index = pd.Series(normalized.index.date, index=normalized.index)
+                last_session = session_index.iloc[-1]
+                normalized = normalized.loc[session_index == last_session]
+                if normalized.empty or len(normalized) < 2:
+                    normalized = intraday_prices[intraday_universe].ffill().tail(20)
                 normalized = normalized / normalized.iloc[0]
                 st.markdown("**Intraday Tape**")
-                chart_frame = normalized.reset_index().rename(columns={normalized.index.name or "index": "Timestamp"})
-                chart_frame = chart_frame.melt("Timestamp", var_name="Ticker", value_name="Indexed Price")
-                intraday_chart = px.line(chart_frame, x="Timestamp", y="Indexed Price", color="Ticker")
-                intraday_chart.update_layout(
-                    height=300,
-                    margin=dict(l=0, r=0, t=0, b=0),
-                    legend_title_text="",
-                    yaxis_title="Indexed Price",
-                )
-                intraday_chart.update_yaxes(range=[0.85, 1.15])
-                st.plotly_chart(intraday_chart, use_container_width=True)
+                st.line_chart(normalized, height=300)
         _render_info_panel(
             "How to read Trader Haven",
             "Session Change shows the current intraday move. 5D Intraday Window shows how the same sleeve has behaved over the recent five-day intraday sample. Move vs 20D Daily Vol scales today's move by normal daily volatility so you can tell whether the tape is actually unusual or just noisy.",
