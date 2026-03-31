@@ -14,6 +14,7 @@ from codex_terminal.analytics.brief import (
     rolling_corr_series,
     what_changed_table,
 )
+from codex_terminal.analytics.earnings import build_equity_fundamental_support, build_spy_earnings_leash
 from codex_terminal.analytics.exposures import classify_holdings, compare_exposure_summary, summarize_exposures
 from codex_terminal.analytics.factors import compute_factor_attribution
 from codex_terminal.analytics.house import HOUSE_BENCHMARK_MODES, build_market_beating_portfolio, summarize_house_modes
@@ -33,6 +34,7 @@ from codex_terminal.config.universe import (
     tickers,
     universe_by_ticker,
 )
+from codex_terminal.data.fundamentals import fetch_fundamental_snapshots, fetch_sp500_earnings_history
 from codex_terminal.data.funds import fetch_fund_profiles
 from codex_terminal.data.fred import DEFAULT_FRED_SERIES, fetch_fred_bundle, infer_fred_status
 from codex_terminal.data.market_data import compute_returns, fetch_intraday_history, fetch_price_history, infer_status, latest_available
@@ -367,11 +369,14 @@ def _load_market_context() -> Dict[str, object]:
     prices = fetch_price_history(tickers())
     returns = compute_returns(prices)
     status = infer_status(prices, tickers())
+    fundamentals = fetch_fundamental_snapshots(tickers())
+    equity_fundamentals = build_equity_fundamental_support(fundamentals)
+    spy_earnings = build_spy_earnings_leash(prices.get("SPY", pd.Series(dtype=float)), fetch_sp500_earnings_history())
     fred_bundle = fetch_fred_bundle(DEFAULT_FRED_SERIES)
     fred_status = infer_fred_status(fred_bundle, DEFAULT_FRED_SERIES)
     regime = classify_regime(fred_bundle)
     macro_snapshot = macro_snapshots(fred_bundle)
-    screener = compute_screener_scores(prices, regime=regime.regime)
+    screener = compute_screener_scores(prices, regime=regime.regime, fundamental_support=equity_fundamentals)
     spy_returns = returns.get("SPY", pd.Series(dtype=float))
     house_model = build_market_beating_portfolio(
         returns,
@@ -387,6 +392,9 @@ def _load_market_context() -> Dict[str, object]:
         "prices": prices,
         "returns": returns,
         "status": status,
+        "fundamentals": fundamentals,
+        "equity_fundamentals": equity_fundamentals,
+        "spy_earnings": spy_earnings,
         "fred_bundle": fred_bundle,
         "fred_status": fred_status,
         "regime": regime,
@@ -711,6 +719,64 @@ def _render_terminal(context: Dict[str, object]) -> None:
                 }
             ),
             use_container_width=True,
+        )
+
+    spy_earnings = context.get("spy_earnings", {})
+    earnings_chart = spy_earnings.get("chart", pd.DataFrame()) if isinstance(spy_earnings, dict) else pd.DataFrame()
+    earnings_metrics = spy_earnings.get("metrics", {}) if isinstance(spy_earnings, dict) else {}
+    earnings_decomp = spy_earnings.get("decomposition", pd.DataFrame()) if isinstance(spy_earnings, dict) else pd.DataFrame()
+    if not earnings_chart.empty:
+        _render_section_title("SPY Earnings Leash")
+        _render_desk_grid(
+            [
+                ("SPY Price 1Y", _format_pct(earnings_metrics.get("Price Growth 1Y")), "trailing"),
+                ("EPS Growth 1Y", _format_pct(earnings_metrics.get("Earnings Growth 1Y")), "trailing"),
+                ("Leash Tension", _format_pct(earnings_metrics.get("Leash Tension")), "price vs earnings"),
+                ("Earnings Yield", _format_pct(earnings_metrics.get("Earnings Yield")), "S&P 500"),
+            ]
+        )
+        ecols = st.columns([1.15, 0.85])
+        with ecols[0]:
+            st.line_chart(earnings_chart, height=320)
+        with ecols[1]:
+            st.dataframe(
+                earnings_decomp.style.format(
+                    {
+                        "Price Growth": _format_pct,
+                        "Earnings Growth": _format_pct,
+                        "Valuation Change Proxy": _format_pct,
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        _render_info_panel(
+            "How to read the earnings leash",
+            "If price runs much faster than earnings, valuation is doing more of the work. If earnings growth is keeping pace, the move is more fundamentally supported. Leash Tension measures how far the normalized price path has drifted from normalized earnings.",
+        )
+
+    equity_fundamentals = context.get("equity_fundamentals", pd.DataFrame())
+    if isinstance(equity_fundamentals, pd.DataFrame) and not equity_fundamentals.empty:
+        _render_section_title("Equity Sleeve Fundamental Support")
+        house_equities = [ticker for ticker in context["house_model"].holdings["ticker"].tolist() if ticker in equity_fundamentals["Ticker"].tolist()]
+        sleeve_table = equity_fundamentals[equity_fundamentals["Ticker"].isin(house_equities)]
+        if sleeve_table.empty:
+            sleeve_table = equity_fundamentals.head(10)
+        st.dataframe(
+            sleeve_table.style.format(
+                {
+                    "Earnings Growth": _format_pct,
+                    "Trailing PE": "{:.2f}",
+                    "Forward PE": "{:.2f}",
+                    "Trailing Earnings Yield": _format_pct,
+                    "Forward Earnings Yield": _format_pct,
+                    "Profit Margin": _format_pct,
+                    "Return On Equity": _format_pct,
+                    "Fundamental Support": _format_float,
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
         )
 
     spy_returns = context["returns"].get("SPY", pd.Series(dtype=float))
@@ -1373,6 +1439,7 @@ def _render_screener(context: Dict[str, object]) -> None:
         "Vol-Adjusted Strength",
         "Tactical Score",
         "Structural Score",
+        "Fundamental Support",
         "Macro Score",
         "Composite Score",
         "Composite Percentile",
@@ -1391,6 +1458,7 @@ def _render_screener(context: Dict[str, object]) -> None:
                 "Vol-Adjusted Strength": "{:.2f}",
                 "Tactical Score": "{:.2f}",
                 "Structural Score": "{:.2f}",
+                "Fundamental Support": "{:.2f}",
                 "Macro Score": "{:.2f}",
                 "Composite Score": "{:.2f}",
                 "Composite Percentile": "{:.0%}",
@@ -1422,6 +1490,11 @@ def _render_screener(context: Dict[str, object]) -> None:
                     "Measure": "Vol-Adjusted Strength",
                     "What it measures": "Recent return divided by realized volatility.",
                     "How to read it": "Higher means better reward per unit of realized risk.",
+                },
+                {
+                    "Measure": "Fundamental Support",
+                    "What it measures": "Equity-only support from earnings growth, earnings yield, and simple quality measures.",
+                    "How to read it": "Higher means price action is getting more support from underlying fundamentals, not just multiple expansion.",
                 },
                 {
                     "Measure": "Structural Score",

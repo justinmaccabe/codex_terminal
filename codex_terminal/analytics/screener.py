@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from codex_terminal.analytics.earnings import fundamental_support_map
 from codex_terminal.analytics.macro import regime_fit_scores
 from codex_terminal.config.universe import universe_by_ticker
 
@@ -54,7 +55,7 @@ def _dynamic_structural_scores(clean: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def compute_screener_scores(prices: pd.DataFrame, regime: str = "Unavailable") -> pd.DataFrame:
+def compute_screener_scores(prices: pd.DataFrame, regime: str = "Unavailable", fundamental_support: pd.DataFrame | None = None) -> pd.DataFrame:
     if prices.empty:
         return pd.DataFrame()
 
@@ -87,7 +88,9 @@ def compute_screener_scores(prices: pd.DataFrame, regime: str = "Unavailable") -
     structural_block["expected_return_context"] = structural_block[
         ["expected_return_context", "dynamic_expected_return_context"]
     ].mean(axis=1)
-    structural_block = structural_block[["value_context", "carry_context", "expected_return_context"]]
+    support_map = fundamental_support_map(fundamental_support if fundamental_support is not None else pd.DataFrame())
+    structural_block["fundamental_support"] = pd.Series(support_map, index=prices.columns).fillna(0.0)
+    structural_block = structural_block[["value_context", "carry_context", "expected_return_context", "fundamental_support"]]
     macro_block = pd.DataFrame({"macro_fit": regime_fit_scores(regime, list(prices.columns))}, index=prices.columns)
 
     tactical_score = tactical_block.mean(axis=1)
@@ -115,6 +118,7 @@ def compute_screener_scores(prices: pd.DataFrame, regime: str = "Unavailable") -
             "Vol-Adjusted Strength": vol_adjusted,
             "Tactical Score": tactical_score,
             "Structural Score": structural_score,
+            "Fundamental Support": structural_block["fundamental_support"],
             "Macro Score": macro_score,
             "Composite Score": composite,
             "Composite Percentile": percentile,
