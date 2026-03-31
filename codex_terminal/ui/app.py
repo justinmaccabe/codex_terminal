@@ -302,7 +302,7 @@ def _render_factor_block(name: str, attribution) -> None:
 
 
 def _load_market_context() -> Dict[str, object]:
-    mode = st.session_state.get("house_benchmark_mode", "Strategic + Tactical")
+    mode = st.session_state.get("house_benchmark_mode", "Committee Winner")
     financing_rate = float(st.session_state.get("house_financing_rate", 0.04))
     expected_return_engine = st.session_state.get("expected_return_engine", "External Inputs")
     prices = fetch_price_history(tickers())
@@ -342,7 +342,7 @@ def _render_sidebar() -> str:
     st.sidebar.caption("Institutional-style cross-asset research terminal")
     st.sidebar.markdown("**House Benchmark**")
     st.sidebar.caption("Strategic core plus tactical overlay, then volatility-targeted to SPY.")
-    current_mode = st.session_state.get("house_benchmark_mode", "Strategic + Tactical")
+    current_mode = st.session_state.get("house_benchmark_mode", "Committee Winner")
     st.session_state["house_benchmark_mode"] = st.sidebar.selectbox(
         "Benchmark Mode",
         HOUSE_BENCHMARK_MODES,
@@ -718,6 +718,37 @@ def _render_morning_brief(context: Dict[str, object]) -> None:
             ("House Leverage", _format_float(house_model.vol_target_leverage), "vs SPY"),
         ]
     )
+    with st.expander("How to read Morning Brief", expanded=False):
+        guide = pd.DataFrame(
+            [
+                {
+                    "Signal": "1W Proxy",
+                    "Meaning": "A rough one-week read derived from the current one-month move.",
+                    "How to use it": "Quick pulse check. It is directional, not a true 5-day total return series.",
+                },
+                {
+                    "Signal": "Momentum Delta",
+                    "Meaning": "Current 1M return minus the implied monthly pace of the 3M return.",
+                    "How to use it": "Positive means momentum is accelerating. Negative means the move is fading versus the recent 3M trend.",
+                },
+                {
+                    "Signal": "Trend",
+                    "Meaning": "Price relative to the 50-day and 200-day moving averages.",
+                    "How to use it": "1.00 = strong trend, 0.50 = mixed trend, 0.00 = weak trend.",
+                },
+                {
+                    "Signal": "Trend Break Risk",
+                    "Meaning": "Flags sleeves that still rank well but no longer have a fully intact trend.",
+                    "How to use it": "A `Yes` means leadership may be getting less stable and deserves closer attention.",
+                },
+                {
+                    "Signal": "Composite Score",
+                    "Meaning": "Blended tactical, structural, and macro read.",
+                    "How to use it": "Use it to rank leadership, but always read it with trend and momentum context.",
+                },
+            ]
+        )
+        st.dataframe(guide, use_container_width=True, hide_index=True)
 
     tabs = st.tabs(["Market Pulse", "What Changed", "What's Hot / Not", "Correlation", "Implications"])
 
