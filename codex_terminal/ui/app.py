@@ -1543,16 +1543,24 @@ def _render_screener(context: Dict[str, object]) -> None:
                 hide_index=True,
             )
         with haven_cols[1]:
-            normalized = intraday_prices[intraday_universe].ffill()
-            if not normalized.empty:
-                session_index = pd.Series(normalized.index.date, index=normalized.index)
+            intraday_window = intraday_prices[intraday_universe].ffill().dropna(how="all")
+            if not intraday_window.empty:
+                session_index = pd.Series(intraday_window.index.date, index=intraday_window.index)
                 last_session = session_index.iloc[-1]
-                normalized = normalized.loc[session_index == last_session]
+                normalized = intraday_window.loc[session_index == last_session]
                 if normalized.empty or len(normalized) < 2:
-                    normalized = intraday_prices[intraday_universe].ffill().tail(20)
-                normalized = normalized / normalized.iloc[0]
-                st.markdown("**Intraday Tape**")
-                st.line_chart(normalized, height=300)
+                    normalized = intraday_window.tail(20)
+                normalized = normalized.dropna(axis=1, how="all")
+                valid_cols = [col for col in normalized.columns if normalized[col].dropna().shape[0] >= 2]
+                normalized = normalized[valid_cols]
+                if not normalized.empty:
+                    normalized = normalized.apply(lambda col: col / col.dropna().iloc[0] if not col.dropna().empty else col)
+                    normalized = normalized.dropna(how="all")
+                    st.markdown("**Intraday Tape**")
+                    if not normalized.empty:
+                        st.line_chart(normalized, height=300)
+                    else:
+                        st.info("Intraday tape is loading, but there is not enough clean session data to plot yet.")
         _render_info_panel(
             "How to read Trader Haven",
             "Session Change shows the current intraday move. 5D Intraday Window shows how the same sleeve has behaved over the recent five-day intraday sample. Move vs 20D Daily Vol scales today's move by normal daily volatility so you can tell whether the tape is actually unusual or just noisy.",
