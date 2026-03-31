@@ -35,7 +35,7 @@ from codex_terminal.config.universe import (
 )
 from codex_terminal.data.funds import fetch_fund_profiles
 from codex_terminal.data.fred import DEFAULT_FRED_SERIES, fetch_fred_bundle, infer_fred_status
-from codex_terminal.data.market_data import compute_returns, fetch_price_history, infer_status, latest_available
+from codex_terminal.data.market_data import compute_returns, fetch_intraday_history, fetch_price_history, infer_status, latest_available
 from codex_terminal.data.vanguard import fetch_vanguard_benchmark_history, infer_vanguard_target_fund
 from codex_terminal.portfolio.benchmarks import degraded_vanguard_state
 from codex_terminal.portfolio.compare import compare_stats, normalize_portfolio_frame, portfolio_returns
@@ -43,6 +43,7 @@ from codex_terminal.portfolio.compare import compare_stats, normalize_portfolio_
 
 PAGES = ["Welcome", "Morning Brief", "Terminal", "Screener", "Portfolio Lab", "Compare", "Morningstar", "Macro", "Learn"]
 DEFAULT_FUND_TICKERS: list[str] = []
+TRADER_HAVEN_TICKERS = ["SPY", "TLT", "GLDM", "PDBC", "WTMF", "VWO", "MTUM", "VGIT"]
 
 
 def _format_pct(value: float) -> str:
@@ -266,6 +267,64 @@ def _render_rank_bar_chart(frame: pd.DataFrame, label_col: str, value_col: str, 
         st.info("Chart unavailable.")
         return
     st.bar_chart(chart, height=280)
+
+
+def _build_trader_haven_frame(intraday_prices: pd.DataFrame, daily_returns: pd.DataFrame) -> pd.DataFrame:
+    if intraday_prices.empty:
+        return pd.DataFrame()
+    latest = intraday_prices.ffill().iloc[-1]
+    open_like = intraday_prices.ffill().groupby(intraday_prices.index.date).head(1)
+    session_open = open_like.iloc[-1] if not open_like.empty else latest * np.nan
+    session_change = latest / session_open.replace(0, np.nan) - 1
+    trailing_5 = intraday_prices.ffill().iloc[-1] / intraday_prices.ffill().iloc[0].replace(0, np.nan) - 1 if len(intraday_prices) > 1 else session_change * np.nan
+    vol_20d = daily_returns.rolling(20).std().iloc[-1] * np.sqrt(252) if not daily_returns.empty else pd.Series(dtype=float)
+    daily_move_z = session_change / (vol_20d / np.sqrt(252)).replace(0, np.nan) if not vol_20d.empty else session_change * np.nan
+    trend_state = pd.Series("Mixed", index=latest.index)
+    trend_state[session_change > 0.0025] = "Bid"
+    trend_state[session_change < -0.0025] = "Offered"
+    board = pd.DataFrame(
+        {
+            "Ticker": latest.index,
+            "Last": latest.values,
+            "Session Change": session_change.reindex(latest.index).values,
+            "5D Intraday Window": trailing_5.reindex(latest.index).values,
+            "Move vs 20D Daily Vol": daily_move_z.reindex(latest.index).values,
+            "Tape": trend_state.reindex(latest.index).values,
+        }
+    )
+    return board.sort_values("Session Change", ascending=False)
+
+
+def _trader_haven_notes(board: pd.DataFrame) -> list[str]:
+    if board.empty:
+        return []
+    frame = board.set_index("Ticker")
+    notes: list[str] = []
+    spy = frame["Session Change"].get("SPY", np.nan)
+    tlt = frame["Session Change"].get("TLT", np.nan)
+    gldm = frame["Session Change"].get("GLDM", np.nan)
+    pdbc = frame["Session Change"].get("PDBC", np.nan)
+    wtmf = frame["Session Change"].get("WTMF", np.nan)
+    if pd.notna(spy) and pd.notna(tlt):
+        if spy > 0 and tlt < 0:
+            notes.append("Equities up with duration down reads more like growth or inflation tolerance than broad defensiveness.")
+        elif spy < 0 and tlt > 0:
+            notes.append("Equities down with duration bid is a classic risk-off confirmation.")
+    if pd.notna(gldm) and pd.notna(pdbc):
+        if gldm > 0 and pdbc > 0:
+            notes.append("Gold and commodities both bid suggest inflation-sensitive positioning is active intraday.")
+        elif gldm > 0 and pdbc < 0:
+            notes.append("Gold stronger than broad commodities points more toward hedging demand than cyclical inflation appetite.")
+    if pd.notna(wtmf) and pd.notna(spy):
+        if wtmf > 0 and spy < 0:
+            notes.append("Managed futures helping on a weak equity session is exactly the diversification behavior the house framework wants.")
+        elif wtmf < 0 and spy > 0:
+            notes.append("Trend sleeves lagging while equity beta leads can mean the tape is sharp but not broad across styles.")
+    leaders = ", ".join(board.head(3)["Ticker"].tolist())
+    laggards = ", ".join(board.tail(3)["Ticker"].tolist())
+    notes.append(f"Intraday leaders: {leaders}.")
+    notes.append(f"Intraday laggards: {laggards}.")
+    return notes
 
 
 @st.dialog("Configure Vanguard Target Retirement Benchmark")
@@ -1391,18 +1450,41 @@ def _render_screener(context: Dict[str, object]) -> None:
     )
     st.dataframe(dispersion.style.format({"Value": _format_pct}), use_container_width=True)
     _render_section_title("Trader Haven")
-    trader_haven = pd.DataFrame(
-        [
-            {"Widget": "Scope Placeholder", "Current Read": "Reserved for your next prompt", "Use": "This section is ready for tape, flow, or setup tooling."},
-            {"Widget": "Top Leader", "Current Read": display.iloc[0]["Ticker"], "Use": "Current strongest sleeve in the screener."},
-            {"Widget": "Weakest Sleeve", "Current Read": display.iloc[-1]["Ticker"], "Use": "Current laggard in the screener."},
-        ]
-    )
-    st.dataframe(trader_haven, use_container_width=True, hide_index=True)
-    _render_info_panel(
-        "Trader Haven",
-        "This block is intentionally reserved for the next build. I left it visible so we can scope the trader workflow without having to rearrange the page again.",
-    )
+    intraday_universe = [ticker for ticker in TRADER_HAVEN_TICKERS if ticker in set(tickers())]
+    intraday_prices = fetch_intraday_history(intraday_universe)
+    trader_board = _build_trader_haven_frame(intraday_prices, context["returns"])
+    if trader_board.empty:
+        st.info("Intraday tape unavailable right now.")
+    else:
+        haven_cols = st.columns([1.25, 0.95])
+        with haven_cols[0]:
+            st.dataframe(
+                trader_board.style.format(
+                    {
+                        "Last": "{:.2f}",
+                        "Session Change": _format_pct,
+                        "5D Intraday Window": _format_pct,
+                        "Move vs 20D Daily Vol": "{:.2f}",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
+        with haven_cols[1]:
+            normalized = intraday_prices[intraday_universe].ffill()
+            if not normalized.empty:
+                normalized = normalized / normalized.iloc[0]
+                st.markdown("**Intraday Tape**")
+                st.line_chart(normalized, height=300)
+        _render_info_panel(
+            "How to read Trader Haven",
+            "Session Change shows the current intraday move. 5D Intraday Window shows how the same sleeve has behaved over the recent five-day intraday sample. Move vs 20D Daily Vol scales today's move by normal daily volatility so you can tell whether the tape is actually unusual or just noisy.",
+        )
+        notes = _trader_haven_notes(trader_board)
+        if notes:
+            st.markdown("**Cross-Asset Read**")
+            for note in notes:
+                st.write(f"- {note}")
 
 
 def _render_portfolio_lab(context: Dict[str, object]) -> None:
