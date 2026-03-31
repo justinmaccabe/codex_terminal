@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict
 
+import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -1548,7 +1549,20 @@ def _render_screener(context: Dict[str, object]) -> None:
             if not normalized.empty:
                 normalized = normalized / normalized.iloc[0]
                 st.markdown("**Intraday Tape**")
-                st.line_chart(normalized, height=300)
+                chart_frame = normalized.reset_index().rename(columns={normalized.index.name or "index": "Timestamp"})
+                chart_frame = chart_frame.melt("Timestamp", var_name="Ticker", value_name="Indexed Price")
+                intraday_chart = (
+                    alt.Chart(chart_frame)
+                    .mark_line()
+                    .encode(
+                        x=alt.X("Timestamp:T", title=None),
+                        y=alt.Y("Indexed Price:Q", title="Indexed Price", scale=alt.Scale(domain=[0.85, 1.15])),
+                        color=alt.Color("Ticker:N", legend=alt.Legend(title=None)),
+                        tooltip=["Timestamp:T", "Ticker:N", alt.Tooltip("Indexed Price:Q", format=".3f")],
+                    )
+                    .properties(height=300)
+                )
+                st.altair_chart(intraday_chart, use_container_width=True)
         _render_info_panel(
             "How to read Trader Haven",
             "Session Change shows the current intraday move. 5D Intraday Window shows how the same sleeve has behaved over the recent five-day intraday sample. Move vs 20D Daily Vol scales today's move by normal daily volatility so you can tell whether the tape is actually unusual or just noisy.",
